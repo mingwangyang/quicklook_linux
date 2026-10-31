@@ -13,7 +13,7 @@ jobs:
   checks:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -31,7 +31,7 @@ jobs:
           rustup toolchain install 1.99.1 --profile minimal --component rustfmt,clippy
           rustup default 1.99.1
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@v2.9.3
 
       - name: rustfmt
         run: cargo fmt --all -- --check
