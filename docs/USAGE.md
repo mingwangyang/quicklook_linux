@@ -6,7 +6,21 @@
 
 - 目标：Ubuntu 24.04 / Linux Mint 22.x，amd64，niri 或其他 Wayland 合成器。
 - 图形栈：GTK4；编解码走系统库（libvips、libmpv、Poppler、libarchive、WebKitGTK）。
-- 不依赖 Electron，不需要 Wine，不使用 X11 专有接口。
+- 不依赖 Electron，不需要 Wine。
+- 程序不依赖 niri：GTK4 画窗口、D-Bus 传指令，Wayland 与 X11 都能跑，差别只在窗口布局策略。
+
+### 实测过的桌面环境
+
+| 环境 | 状态 |
+|---|---|
+| niri 26.04 + Wayland（Linux Mint 22.3） | **主力验证环境**，全功能真机验收，包括窗口规则与托盘（noctalia 面板） |
+| X11 + KWin（KDE Plasma） | X11 预览窗口置顶（0.0.9）已实测；该会话下的文件管理器接入未测 |
+| Nemo 6.6 / Caja 1.26 / Thunar 4.18 / Nautilus 46.4 / Dolphin 23.08 | 各宿主的空格/右键链路在 Xephyr 隔离会话用真实进程实测（Dolphin 仅右键） |
+| GNOME / KDE / Cinnamon / MATE / Xfce 普通桌面 | 代码路径已验证（无平铺规则、开箱即用），未逐桌面目测 |
+| sway / Hyprland | 平铺合成器：可识别并打印窗口规则片段供粘贴，未实机会话验证 |
+| 托盘宿主 | noctalia 实测；KDE 面板、GNOME AppIndicator、Waybar 未测 |
+
+完整验证记录（每项怎么测的、截图与数据）见 [VALIDATION.md](VALIDATION.md)。
 
 ## 安装
 

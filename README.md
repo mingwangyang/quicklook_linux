@@ -8,7 +8,7 @@
 
 当前版本：**V0.0.9**（`quicklook --version` 可查看）。
 
-Rust 编写的 Linux 原生文件预览器，预览核心独立运行，适配 Linux Mint 22.3、niri / Wayland，并提供 Nemo、Dolphin、GNOME Files（Nautilus）、Thunar、Caja、Yazi 的可选入口。使用 GTK4、libmpv、Poppler、GtkSourceView、libvips 与 WebKitGTK，构建和运行均不需要 Wine。
+Rust 编写的 Linux 原生文件预览器，预览核心独立运行，适配 Linux Mint 22.3、niri / Wayland，并提供 Nemo、Dolphin、GNOME Files（Nautilus）、Thunar、Caja、Yazi 的可选入口。程序不依赖 niri，Wayland 与 X11 都能跑；实测过的桌面环境与验证边界见[适用环境](docs/USAGE.md#适用环境)。使用 GTK4、libmpv、Poppler、GtkSourceView、libvips 与 WebKitGTK，构建和运行均不需要 Wine。
 
 已实现 P0/P1 预览路径、统一窗口交互、CLI/DBus、niri 配置和六种文件管理器适配（Nemo、Dolphin、Nautilus、Thunar、Caja、Yazi），常驻进程还带一个托盘图标。Office 文档（docx / xlsx / pptx）采用原生 OOXML 解析，压缩包支持逐层展开浏览包内文件，Markdown 里的 ```mermaid 流程图离线渲染，CSV / TSV 按分隔符渲染成表格（可切源码），JSON 默认打开源码视图。PSD 图层树、PCManFM 等其他文件管理器适配仍属于 P2。
 
