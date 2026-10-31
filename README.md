@@ -1,6 +1,6 @@
 # Quick Look for Linux
 
-[![CI](https://github.com/mingwangyang/quicklook_linux/quick_look_linux/actions/workflows/ci.yml/badge.svg)](./.github/workflows/ci.yml)
+[![CI](https://github.com/mingwangyang/quicklook_linux/actions/workflows/ci.yml/badge.svg)](./.github/workflows/ci.yml)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/License-GPL--3.0--or--later-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/badge/release-V0.0.9-green)](../../releases)
 
@@ -15,6 +15,7 @@ Rust 编写的 Linux 原生文件预览器，预览核心独立运行，适配 L
 ## 目录
 
 - [使用](#使用)
+- [实测过的桌面环境](#实测过的桌面环境)
 - [可选文件管理器入口](#可选文件管理器入口)
 - [设置](#设置)
 - [deb 安装](#deb-安装)
@@ -22,6 +23,19 @@ Rust 编写的 Linux 原生文件预览器，预览核心独立运行，适配 L
 - [验证](#验证)
 - [许可证](#许可证)
 - [参与贡献](#参与贡献)
+
+## 实测过的桌面环境
+
+程序不依赖 niri，Wayland 与 X11 都能跑，差别只在窗口布局策略。各环境的实际验证状态（怎么测的、数据与截图见 [VALIDATION.md](docs/VALIDATION.md)）：
+
+| 环境 | 验证状态 |
+|---|---|
+| **niri 26.04 + Wayland**（Linux Mint 22.3） | ✅ 主力验证环境：全功能真机验收，含窗口规则与 noctalia 面板托盘 |
+| **X11 + KWin（KDE Plasma）** | ✅ 预览窗口置顶（0.0.9）真机实测；该会话下的文件管理器接入未测 |
+| **Nemo 6.6 / Caja 1.26 / Thunar 4.18 / Nautilus 46.4 / Dolphin 23.08** | ✅ 各宿主的空格/右键链路在 Xephyr 隔离会话用真实进程实测（Dolphin 仅右键） |
+| GNOME / KDE / Cinnamon / MATE / Xfce 普通桌面 | ⚠️ 代码路径已验证（无平铺规则、开箱即用），未逐桌面目测 |
+| sway / Hyprland | ⚠️ 可识别并打印窗口规则片段供粘贴，未实机会话验证 |
+| 托盘宿主 | ✅ noctalia 实测；⚠️ KDE 面板、GNOME AppIndicator、Waybar 未测 |
 
 ## 使用
 
