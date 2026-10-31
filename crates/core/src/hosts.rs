@@ -402,6 +402,44 @@ pub fn apply_window_rules_only(config: &Config, dry_run: bool) -> Result<Report>
 }
 
 fn apply_nemo(config: &Config, prefix: &Path, data: &Path, report: &mut Report) -> Result<()> {
+    apply_nemo_at(config, prefix, data, report, nemo_binary_override())
+}
+
+/// 测试钩子：环境变量指向伪造的 nemo 二进制时用它替代 /usr/bin/nemo 做 ABI 指纹验证，
+/// 并允许用 QUICKLOOK_TEST_NEMO_FINGERPRINT 覆盖期望指纹，
+/// 让「改键装旁路器」的链路可以在没有真实 Nemo 的机器（CI）上端到端验证。
+#[cfg(test)]
+fn nemo_binary_override() -> Option<&'static std::path::Path> {
+    std::env::var_os("QUICKLOOK_TEST_NEMO_BIN")
+        .as_deref()
+        .map(std::path::Path::new)
+}
+
+#[cfg(test)]
+fn verified_fingerprint() -> u64 {
+    std::env::var("QUICKLOOK_TEST_NEMO_FINGERPRINT")
+        .ok()
+        .and_then(|v| u64::from_str_radix(&v, 16).ok())
+        .unwrap_or(VERIFIED_NEMO_FINGERPRINT)
+}
+
+#[cfg(not(test))]
+fn verified_fingerprint() -> u64 {
+    VERIFIED_NEMO_FINGERPRINT
+}
+
+#[cfg(not(test))]
+fn nemo_binary_override() -> Option<&'static std::path::Path> {
+    None
+}
+
+fn apply_nemo_at(
+    config: &Config,
+    prefix: &Path,
+    data: &Path,
+    report: &mut Report,
+    binary: Option<&Path>,
+) -> Result<()> {
     let library = prefix.join("lib/quicklook/libquicklook_nemo.so");
     let launcher = launcher_path(data, "nemo");
     let entry = data.join("applications/nemo.desktop");
@@ -426,10 +464,11 @@ fn apply_nemo(config: &Config, prefix: &Path, data: &Path, report: &mut Report) 
 
     let remap =
         config.host_nemo && config.hijack_native && config.nemo_key() != PreviewKey::default();
-    let pin = std::fs::read("/usr/bin/nemo")
+    let expected = verified_fingerprint();
+    let pin = std::fs::read(binary.unwrap_or(Path::new("/usr/bin/nemo")))
         .ok()
-        .filter(|bytes| cfg!(target_arch = "x86_64") && fnv1a(bytes) == VERIFIED_NEMO_FINGERPRINT)
-        .map(|_| format!(" QUICKLOOK_NEMO_FINGERPRINT={VERIFIED_NEMO_FINGERPRINT:016x}"));
+        .filter(|bytes| cfg!(target_arch = "x86_64") && fnv1a(bytes) == expected)
+        .map(|_| format!(" QUICKLOOK_NEMO_FINGERPRINT={expected:016x}"));
     let Some(pin) = pin.filter(|_| library.is_file()) else {
         remove(&launcher, report)?;
         remove_desktop_override(&entry, "quicklook-nemo", report)?;
@@ -1502,6 +1541,20 @@ mod tests {
             ..Config::default()
         }
     }
+    /// 写一个伪 nemo 二进制，把它的路径与实际 fnv1a 指纹通过环境变量
+    /// 注入 apply_nemo（仅测试路径生效），让改键→装旁路器的完整链路
+    /// 在没有真实 Nemo 的机器（CI）上也能验证。
+    fn install_fake_nemo(prefix: &std::path::Path) {
+        let bytes = b"ELF quicklook fake nemo binary for fingerprint check";
+        let path = prefix.join("fake-nemo");
+        std::fs::write(&path, bytes).unwrap();
+        std::env::set_var("QUICKLOOK_TEST_NEMO_BIN", &path);
+        std::env::set_var(
+            "QUICKLOOK_TEST_NEMO_FINGERPRINT",
+            format!("{:016x}", fnv1a(bytes)),
+        );
+    }
+
     fn setup() -> (tempfile::TempDir, PathBuf, PathBuf, PathBuf) {
         let root = tempfile::tempdir().unwrap();
         let prefix = root.path().join("prefix");
@@ -1720,6 +1773,7 @@ mod tests {
     #[test]
     fn per_host_keys_override_only_their_own_host() {
         let (_root, prefix, data, config_home) = setup();
+        install_fake_nemo(&prefix);
         let config = Config {
             preview_key: "Ctrl+Space".into(),
             preview_key_nemo: "F3".into(),
@@ -2236,6 +2290,7 @@ mod tests {
     #[test]
     fn nemo_custom_key_installs_interceptor_and_restores_default() {
         let (_root, prefix, data, config_home) = setup();
+        install_fake_nemo(&prefix);
         let config = Config {
             preview_key: "Ctrl+Space".into(),
             ..enabled()
