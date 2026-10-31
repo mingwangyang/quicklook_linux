@@ -17,9 +17,13 @@ impl Controller {
             Body::Tile { .. } => {}
             Body::Pdf(pdf) => {
                 self.pdf_view(&prepared.info, pdf);
-                // PDF 默认用连续滚动；用户可在格式栏切回单页。
-                if self.config.pdf_continuous && !self.state.borrow().pdf_continuous {
-                    self.toggle_pdf_continuous();
+                // PDF 默认用连续滚动；用户切过单页/连续后以用户选择为准。
+                let user_mode = self.state.borrow().pdf_user_mode;
+                if user_mode.is_none()
+                    && self.config.pdf_continuous
+                    && !self.state.borrow().pdf_continuous
+                {
+                    self.toggle_pdf_continuous(false);
                 }
             }
             Body::Text(text) => {
@@ -485,7 +489,7 @@ impl Controller {
         let weak = Rc::downgrade(self);
         continuous.connect_clicked(move |button| {
             if let Some(c) = weak.upgrade() {
-                c.toggle_pdf_continuous();
+                c.toggle_pdf_continuous(true);
                 button.set_label(if c.state.borrow().pdf_continuous {
                     "单页模式"
                 } else {
@@ -625,7 +629,7 @@ impl Controller {
         self.status
             .set_text("连续滚动 · Ctrl+滚轮或 +/- 缩放全部页面 · Page Up/Down 翻页");
     }
-    pub(super) fn toggle_pdf_continuous(self: &Rc<Self>) {
+    pub(super) fn toggle_pdf_continuous(self: &Rc<Self>, user: bool) {
         let (prepared, continuous, page) = {
             let s = self.state.borrow();
             (s.prepared.clone(), s.pdf_continuous, s.page)
@@ -636,6 +640,11 @@ impl Controller {
         let Body::Pdf(pdf) = &prepared.body else {
             return;
         };
+        if user {
+            let mut s = self.state.borrow_mut();
+            s.pdf_user_mode = Some(!continuous);
+            s.pdf_user_file = Some(prepared.info.key());
+        }
         if continuous {
             {
                 let mut s = self.state.borrow_mut();

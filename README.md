@@ -2,11 +2,11 @@
 
 [![CI](https://github.com/mingwangyang/quicklook_linux/actions/workflows/ci.yml/badge.svg)](./.github/workflows/ci.yml)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/License-GPL--3.0--or--later-blue.svg)](LICENSE)
-[![Release](https://img.shields.io/badge/release-V0.0.9-green)](../../releases)
+[![Release](https://img.shields.io/badge/release-V0.0.10-green)](../../releases)
 
 **English**: A native Quick Look–style file previewer for Linux, written in Rust + GTK4 — select a file in your file manager, press Space, and it pops up instantly.
 
-当前版本：**V0.0.9**（`quicklook --version` 可查看）。
+当前版本：**V0.0.10**（`quicklook --version` 可查看）。
 
 Rust 编写的 Linux 原生文件预览器，预览核心独立运行，适配 Linux Mint 22.3、niri / Wayland，并提供 Nemo、Dolphin、GNOME Files（Nautilus）、Thunar、Caja、Yazi 的可选入口。程序不依赖 niri，Wayland 与 X11 都能跑；实测过的桌面环境与验证边界见[适用环境](docs/USAGE.md#适用环境)。使用 GTK4、libmpv、Poppler、GtkSourceView、libvips 与 WebKitGTK，构建和运行均不需要 Wine。
 
@@ -107,7 +107,7 @@ quicklook --apply-hosts       # 按当前配置重写各文件管理器集成，
 Ubuntu 24.04 / Linux Mint 22.x amd64：
 
 ```bash
-sudo apt install ./dist/quicklook_V0.0.9_amd64.deb
+sudo apt install ./dist/quicklook_V0.0.10_amd64.deb
 ```
 
 应用菜单有独立的「Quick Look 设置」入口。Caja 安装 python3-caja、启用接管并应用后，可直接在终端运行 `caja`；Thunar 等启动器适配方式见 FILE_MANAGERS.md。不会替换终端里的同名命令。已运行的旧实例需正常退出并重新打开。

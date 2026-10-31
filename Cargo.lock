@@ -1078,7 +1078,7 @@ dependencies = [
 
 [[package]]
 name = "quicklook"
-version = "0.0.9"
+version = "0.0.10"
 dependencies = [
  "anyhow",
  "clap",
@@ -1090,7 +1090,7 @@ dependencies = [
 
 [[package]]
 name = "quicklook-caja"
-version = "0.0.9"
+version = "0.0.10"
 dependencies = [
  "anyhow",
  "gio",
@@ -1102,7 +1102,7 @@ dependencies = [
 
 [[package]]
 name = "quicklook-clipboard"
-version = "0.0.9"
+version = "0.0.10"
 dependencies = [
  "anyhow",
  "wl-clipboard-rs",
@@ -1110,7 +1110,7 @@ dependencies = [
 
 [[package]]
 name = "quicklook-core"
-version = "0.0.9"
+version = "0.0.10"
 dependencies = [
  "anyhow",
  "chardetng",
@@ -1126,7 +1126,7 @@ dependencies = [
 
 [[package]]
 name = "quicklook-nemo"
-version = "0.0.9"
+version = "0.0.10"
 dependencies = [
  "anyhow",
  "gio",
@@ -1138,7 +1138,7 @@ dependencies = [
 
 [[package]]
 name = "quicklook-thunar"
-version = "0.0.9"
+version = "0.0.10"
 dependencies = [
  "anyhow",
  "gio",
@@ -1150,7 +1150,7 @@ dependencies = [
 
 [[package]]
 name = "quicklook-viewer"
-version = "0.0.9"
+version = "0.0.10"
 dependencies = [
  "anyhow",
  "encoding_rs",

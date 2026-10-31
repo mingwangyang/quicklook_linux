@@ -27,7 +27,7 @@
 ### deb 包（推荐，系统级）
 
 ~~~bash
-sudo apt install ./dist/quicklook_V0.0.9_amd64.deb
+sudo apt install ./dist/quicklook_V0.0.10_amd64.deb
 ~~~
 
 安装后 `quicklook` 在 `/usr/bin`，应用菜单里会出现「Quick Look」和「Quick Look 设置」。库依赖由系统包管理，deb 不会自带 GTK、mpv、Poppler 这些运行时。

@@ -97,7 +97,7 @@ cargo test --locked --workspace
 cargo clippy --locked --workspace --all-targets -- -D warnings
 python3 scripts/test-caja-adapter.py --profile release
 python3 scripts/test-nemo-adapter.py --profile release
-python3 scripts/test-deb.py dist/quicklook_V0.0.9_amd64.deb
+python3 scripts/test-deb.py dist/quicklook_V0.0.10_amd64.deb
 ```
 
 Caja 在 Xephyr + marco + 私有 D-Bus 会话中验证空格、改键、多选、地址栏、菜单回调及选择引用释放。不会重启用户会话中的文件管理器。Nemo 的测试选择器使用临时 keyfile 设置强制列表视图，不依赖用户当前布局。
