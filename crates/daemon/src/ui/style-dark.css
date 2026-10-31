@@ -1,0 +1,17 @@
+window.quicklook { background: #11151b; color: #e4eaf2; }
+.quicklook headerbar { background: #1c222c; border-bottom: 1px solid #303947; }
+.quicklook .dim-label { color: #9caabd; }
+.quicklook .bottom-bar, .quicklook .format-bar { background: #1a2029; border-top: 1px solid #303947; }
+.quicklook .file-tile { background: #1b222d; }
+.quicklook listview, .quicklook gridview { background: #11151b; color: #e4eaf2; }
+.quicklook listview row { border-bottom: 1px solid alpha(#64748b, 0.16); }
+.quicklook textview text { background: #11151b; color: #dbe5f2; }
+.quicklook .error { color: #fda4af; }
+
+.quicklook headerbar, .quicklook headerbar label, .quicklook headerbar button { color: #e4eaf2; }
+.quicklook button, .quicklook menubutton > button, .quicklook dropdown > button { background: #263140; color: #e4eaf2; border: 1px solid #3c4b60; }
+.quicklook button:hover { background: #34465d; }
+.quicklook button.suggested-action { background: #2563b8; color: white; border-color: #3b82d0; }
+.quicklook button:checked { background: #274c77; border-color: #60a5fa; }
+.quicklook popover contents { background: #1c2533; color: #e4eaf2; }
+.quicklook .fullscreen-hint { background: rgba(15, 20, 28, 0.86); color: #e4eaf2; padding: 8px 16px; border-radius: 999px; font-size: 13px; }

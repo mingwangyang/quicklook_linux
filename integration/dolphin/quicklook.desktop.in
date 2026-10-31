@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Service
+X-KDE-ServiceTypes=KonqPopupMenu/Plugin
+MimeType=all/allfiles;inode/directory;
+Actions=quicklook;
+X-KDE-Priority=TopLevel
+
+[Desktop Action quicklook]
+Name=Preview with Quick Look
+Name[zh_CN]=用 Quick Look 预览
+Icon=org.quicklook.Preview
+Exec="@QUICKLOOK_CLI@" -- %U

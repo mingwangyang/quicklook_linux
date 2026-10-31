@@ -1,0 +1,27 @@
+name: 功能建议
+description: 新格式、新文件管理器、新交互
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 想解决的问题
+      description: 现在缺什么、为什么需要
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 建议方案
+    validations:
+      required: true
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: 相关范围
+      options:
+        - label: 新预览格式
+        - label: 文件管理器适配
+        - label: 窗口交互 / 快捷键
+        - label: 设置 / 配置
+        - label: 打包 / 安装

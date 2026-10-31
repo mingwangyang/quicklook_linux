@@ -1,0 +1,61 @@
+#!/bin/sh
+# Quick Look 安装后钩子。
+#
+# 系统包默认不该动用户的家目录，但「装完还要自己敲一条命令」体验太差，所以这里
+# 只做一件很窄的事：以**发起这次安装的那个桌面用户**的身份，把 Quick Look 自己
+# 托管的文件补上——全部带受管标记，幂等，且可用 `quicklook --remove-hosts` 撤销。
+#
+# 两种力度：
+#   * 用户此前在设置里启用过接管（config.toml 里 hijack_native = true）：完整
+#     重写文件管理器接入 + 合成器窗口规则，等于升级后自动修复。
+#   * 没有配置或没启用接管：只维护窗口规则（预览窗口该浮动就浮动），不碰任何
+#     宿主菜单/按键，避免替用户做主。
+set -e
+
+case "$1" in
+    configure) ;;
+    *) exit 0 ;;
+esac
+
+target_user=''
+if [ -n "${PKEXEC_UID:-}" ]; then
+    target_user=$(id -un "$PKEXEC_UID" 2>/dev/null || true)
+fi
+if [ -z "$target_user" ] && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ]; then
+    target_user=$SUDO_USER
+fi
+if [ -z "$target_user" ] || [ "$target_user" = root ]; then
+    echo "quicklook: 未识别到发起安装的桌面用户，跳过用户级接入。"
+    echo "quicklook: 需要时打开「Quick Look 设置」点应用，或运行 quicklook --apply-hosts"
+    exit 0
+fi
+
+user_home=$(getent passwd "$target_user" | cut -d: -f6)
+if [ -z "$user_home" ] || [ ! -d "$user_home" ]; then
+    exit 0
+fi
+
+as_user() {
+    if command -v runuser >/dev/null 2>&1; then
+        runuser -u "$target_user" -- env -u VIPSHOME HOME="$user_home" "$@"
+    else
+        su -s /bin/sh "$target_user" -c "HOME=$(printf '%s' "$user_home") $*"
+    fi
+}
+
+config_file=$user_home/.config/quicklook/config.toml
+if [ ! -f "$config_file" ]; then
+    # 首次安装：自动检测这台机器装了哪些文件管理器（nemo/nautilus/dolphin/
+    # thunar/caja/yazi），把它们写进配置并直接打开接管、写入接入。这样装完
+    # 就能用，不必再打开设置手动勾选。
+    echo "quicklook: 首次安装，自动检测文件管理器并启用预览按键接管……"
+    as_user /usr/bin/quicklook --autodetect-hosts || true
+elif grep -Eq '^[[:space:]]*hijack_native[[:space:]]*=[[:space:]]*true' "$config_file"; then
+    # 已经选择过接管：升级后自动补回被覆盖或丢失的接入文件。
+    as_user /usr/bin/quicklook --apply-hosts || true
+else
+    # 用户在设置里明确关闭了接管：只让预览窗口按浮动规则显示，别的都不动。
+    as_user /usr/bin/quicklook --apply-window-rules || true
+fi
+
+exit 0

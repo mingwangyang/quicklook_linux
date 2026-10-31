@@ -1,0 +1,37 @@
+// 文件选择器是独立对话框：默认平铺会被塞进当前列，应该浮在中间并接收焦点。
+// GTK4 的 FileDialog 走 xdg-desktop-portal-gtk，窗口的 app-id 不是我们的应用。
+window-rule {
+    match app-id="^xdg-desktop-portal-gtk$" title="^选择要预览的文件$"
+    open-floating true
+}
+
+window-rule {
+    match app-id="^org\\.quicklook\\.Preview$" title="^选择要预览的文件$"
+    open-floating true
+    geometry-corner-radius 12
+    clip-to-geometry true
+}
+
+window-rule {
+    match app-id="^org\\.quicklook\\.Preview$"
+    exclude title="^选择要预览的文件$"
+    open-floating true
+    // 预览要接收随后的 Space/Esc；不给焦点的话按键会落回文件管理器，
+    // 下一次空格又触发一次切换，看起来就是窗口闪一下立刻消失。
+    open-focused true
+    geometry-corner-radius 12
+    clip-to-geometry true
+}
+
+// 独立窗口按普通窗口平铺，仍然不抢焦点。
+window-rule {
+    match app-id="^org\\.quicklook\\.Preview\\.Detached$"
+    open-floating false
+    open-focused false
+}
+
+// 设置是对话框：浮动即可，尺寸由应用自己请求。
+window-rule {
+    match app-id="^org\\.quicklook\\.Preview\\.Settings$"
+    open-floating true
+}

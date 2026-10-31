@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Quick Look Settings
+Name[zh_CN]=Quick Look 设置
+Comment=Configure previews and optional file manager integration
+Comment[zh_CN]=配置预览与可选的文件管理器接入
+Exec=quicklook --settings
+Icon=org.quicklook.Preview
+Terminal=false
+Categories=Settings;Utility;
+StartupNotify=false

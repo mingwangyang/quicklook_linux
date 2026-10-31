@@ -1,0 +1,70 @@
+name: Bug 报告
+description: 预览异常、崩溃、集成失效等问题
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈！安全漏洞请勿在此提交，见 [SECURITY.md](../../SECURITY.md)。
+  - type: input
+    id: version
+    attributes:
+      label: 版本
+      description: "quicklook --version 的输出"
+      placeholder: V0.0.9
+    validations:
+      required: true
+  - type: dropdown
+    id: session
+    attributes:
+      label: 显示会话
+      options:
+        - Wayland（niri）
+        - Wayland（其他合成器）
+        - X11
+    validations:
+      required: true
+  - type: dropdown
+    id: host
+    attributes:
+      label: 文件管理器 / 入口
+      options:
+        - Nemo
+        - Dolphin
+        - GNOME Files (Nautilus)
+        - Thunar
+        - Caja
+        - Yazi
+        - 终端 / CLI
+        - 应用菜单 / 选文件窗口
+        - 托盘
+    validations:
+      required: true
+  - type: input
+    id: distro
+    attributes:
+      label: 发行版
+      placeholder: Linux Mint 22.3 / Ubuntu 24.04
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 在 … 中选中 …
+        2. 按空格
+        3. …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为与实际行为
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志
+      description: quicklookd / journalctl --user 中相关片段

@@ -1,0 +1,38 @@
+#!/bin/sh
+# 卸载前撤销用户级接入：否则会留下指向已删二进制的启动器与 desktop 覆盖，
+# 文件管理器点开会报错。升级时（参数为 upgrade）不动任何东西。
+set -e
+
+case "$1" in
+    remove|purge) ;;
+    *) exit 0 ;;
+esac
+
+target_user=''
+if [ -n "${PKEXEC_UID:-}" ]; then
+    target_user=$(id -un "$PKEXEC_UID" 2>/dev/null || true)
+fi
+if [ -z "$target_user" ] && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ]; then
+    target_user=$SUDO_USER
+fi
+if [ -z "$target_user" ] || [ "$target_user" = root ]; then
+    exit 0
+fi
+
+user_home=$(getent passwd "$target_user" | cut -d: -f6)
+if [ -z "$user_home" ] || [ ! -d "$user_home" ]; then
+    exit 0
+fi
+
+# prerm 阶段 /usr/bin/quicklook 还在，可以调用它自己清理。
+if [ -x /usr/bin/quicklook ]; then
+    if command -v runuser >/dev/null 2>&1; then
+        runuser -u "$target_user" -- env -u VIPSHOME HOME="$user_home" \
+            /usr/bin/quicklook --remove-hosts || true
+    else
+        su -s /bin/sh "$target_user" -c \
+            "HOME=$(printf '%s' "$user_home") /usr/bin/quicklook --remove-hosts" || true
+    fi
+fi
+
+exit 0

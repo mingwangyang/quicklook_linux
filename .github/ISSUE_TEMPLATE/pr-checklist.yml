@@ -1,0 +1,18 @@
+name: PR 自查
+description: 提交 PR 前请确认
+body:
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: 自查清单
+      options:
+        - label: 质量门全部通过（fmt / clippy -D warnings / test --locked）
+          required: true
+        - label: 面向用户的行为已同步 README / docs/USAGE.md
+        - label: CHANGELOG.md 的 Unreleased 段落已记录
+        - label: 新增依赖已在描述中说明理由
+        - label: 新增第三方资源已登记来源与许可（integration/vendor/README.md）
+  - type: textarea
+    id: notes
+    attributes:
+      label: 说明

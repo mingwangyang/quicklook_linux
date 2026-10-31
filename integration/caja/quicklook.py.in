@@ -1,0 +1,58 @@
+# BEGIN quicklook managed integration
+#!/usr/bin/python3
+"""Caja 扩展：加载 Rust 按键适配，并提供选中文件的右键预览。
+
+由 `quicklook --apply-hosts` 生成；在设置里关掉 Caja 集成或执行卸载时会一起移除。
+"""
+import ctypes
+import os
+import subprocess
+import sys
+
+import gi
+
+gi.require_version("Caja", "2.0")
+from gi.repository import Caja, GObject  # noqa: E402
+
+CLI = @QUICKLOOK_CLI@
+ADAPTER = @QUICKLOOK_ADAPTER@
+LOAD_ADAPTER = @LOAD_ADAPTER@
+
+# Caja imports user extensions on startup, including when invoked as plain
+# /usr/bin/caja. Key handling stays in Rust; no PATH shim or preload is needed.
+# Keep the handle and its callbacks alive for the process lifetime.
+_adapter = None
+if LOAD_ADAPTER:
+    try:
+        _adapter = ctypes.CDLL(ADAPTER, mode=os.RTLD_LOCAL | os.RTLD_NODELETE)
+        _install = _adapter.quicklook_caja_install
+        _install.argtypes = []
+        _install.restype = ctypes.c_int
+        _install()
+    except (OSError, AttributeError) as error:
+        print(f"Quick Look: Caja 按键适配加载失败：{error}", file=sys.stderr)
+
+
+class QuickLookProvider(GObject.GObject, Caja.MenuProvider):
+    """把当前选中的文件交给 quicklook，由它决定打开还是关闭。"""
+
+    def get_file_items(self, window, files):
+        uris = [file.get_uri() for file in files if file is not None]
+        if not uris:
+            return []
+        item = Caja.MenuItem(
+            name="QuickLook::Preview",
+            label="用 Quick Look 预览",
+            tip="在 Quick Look 窗口里预览选中的文件",
+        )
+        item.connect("activate", self._preview, uris)
+        return [item]
+
+    # caja-python 是按属性名找 get_file_items（发行版自带的 caja-admin.py 就这么写），
+    # GObject 内省则是按 vfunc 名找 do_get_file_items。两个名字都指向同一个实现，
+    # 不管走哪条路都能出来。
+    def do_get_file_items(self, window, files):
+        return self.get_file_items(window, files)
+
+    def _preview(self, _item, uris):
+        subprocess.Popen([CLI, "--show", *uris], stdin=subprocess.DEVNULL)

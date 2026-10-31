@@ -1,0 +1,29 @@
+[workspace]
+members = ["crates/core", "crates/cli", "crates/daemon", "crates/nemo-adapter", "crates/thunar-adapter", "crates/caja-adapter", "crates/clipboard"]
+exclude = ["tools/environment-check"]
+resolver = "3"
+
+[workspace.package]
+version = "0.0.9"
+edition = "2024"
+rust-version = "1.99"
+license = "GPL-3.0-or-later"
+authors = ["Quick Look Linux contributors"]
+repository = "https://github.com/mingwangyang/quicklook_linux/quick_look_linux"
+homepage = "https://github.com/mingwangyang/quicklook_linux/quick_look_linux"
+description = "Native Quick Look style file previewer for Linux (Rust + GTK4)"
+
+[workspace.dependencies]
+gio = "0.22"
+glib = "0.22"
+gdk4 = { version = "=0.11.5" }
+gtk4 = { version = "=0.11.5", features = ["v4_14"] }
+sourceview5 = { version = "=0.11.2", features = ["v5_12"] }
+webkit6 = "=0.6.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+
+[profile.release]
+lto = "thin"
+strip = "debuginfo"

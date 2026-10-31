@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          # 与 scripts/dev-packages.txt 保持一致的构建期子集（去掉运行期工具）
+          pkgs=$(grep -vE '^\s*(#|$)' scripts/dev-packages.txt \
+                 | grep -vE '^(ffmpeg|ghostscript|fzf|wl-clipboard|wayland-utils|vainfo|mesa-va-drivers|dbus-user-session|libjack-jackd2-dev|libva-dev)$' \
+                 | tr '\n' ' ')
+          sudo apt-get --no-remove install --no-install-recommends $pkgs
+
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install 1.99.1 --profile minimal --component rustfmt,clippy
+          rustup default 1.99.1
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: rustfmt
+        run: cargo fmt --all -- --check
+
+      - name: clippy
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+
+      - name: tests
+        run: cargo test --locked --workspace
+
+      - name: environment probe (basic)
+        run: |
+          export GDK_BACKEND=wayland
+          # 无显示器的探针：初始化 Wayland/GTK 而不开窗；失败仅告警，不阻塞 CI
+          bash scripts/verify-rust-gtk.sh --basic || echo "::warning::environment probe failed (likely no Wayland runtime in CI)"

@@ -1,0 +1,21 @@
+window.quicklook { background: #f7f8fa; color: #1f2933; }
+.quicklook headerbar { background: #eef1f5; border-bottom: 1px solid #d7dde5; padding: 6px; }
+.quicklook .file-title { font-weight: 600; font-size: 14px; }
+.quicklook .dim-label { color: #5b6673; font-size: 12px; }
+.quicklook button { border-radius: 7px; }
+.quicklook .bottom-bar, .quicklook .format-bar { padding: 9px 12px; background: #eef1f5; border-top: 1px solid #d7dde5; }
+.quicklook .media-controls { padding: 10px 14px; }
+.quicklook .file-tile { padding: 12px; border-radius: 12px; background: #eef1f5; margin: 8px; }
+.quicklook listview, .quicklook gridview { background: #f7f8fa; color: #1f2933; }
+.quicklook listview row { padding: 10px 16px; border-bottom: 1px solid alpha(#5b6673, 0.18); }
+.quicklook textview text { background: #f7f8fa; color: #20262e; }
+.quicklook .section-title { font-size: 20px; font-weight: 600; }
+.quicklook .error { color: #b42318; padding: 12px; }
+
+.quicklook headerbar, .quicklook headerbar label, .quicklook headerbar button { color: #1f2933; }
+.quicklook button, .quicklook menubutton > button, .quicklook dropdown > button { background: #ffffff; color: #1f2933; border: 1px solid #c9d1db; }
+.quicklook button:hover { background: #e7ebf0; }
+.quicklook button.suggested-action { background: #2563b8; color: white; border-color: #1f4f96; }
+.quicklook button:checked { background: #d7e3f5; border-color: #2563b8; }
+.quicklook popover contents { background: #ffffff; color: #1f2933; }
+.quicklook .fullscreen-hint { background: rgba(31, 41, 51, 0.82); color: #f7f8fa; padding: 8px 16px; border-radius: 999px; font-size: 13px; }

@@ -1,0 +1,6 @@
+{
+  "version": "nemo 6.6.3",
+  "arch": "x86_64",
+  "fingerprint_fnv1a64": "d1b031c7a1d60e84",
+  "verified": "Linux Mint 22.3; GtkScrolledWindowClass + NemoViewClass.get_selection slot 11; isolated integration tests"
+}

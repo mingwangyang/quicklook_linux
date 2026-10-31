@@ -1,0 +1,21 @@
+[package]
+name = "quicklook-nemo"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "LD_PRELOAD adapter hooking Nemo's Space preview"
+
+[lib]
+name = "quicklook_nemo"
+crate-type = ["cdylib"]
+
+[dependencies]
+quicklook-core = { path = "../core" }
+gio.workspace = true
+glib.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+libloading = "0.9"

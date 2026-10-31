@@ -1,0 +1,14 @@
+<action>
+  <icon>org.quicklook.Preview</icon>
+  <name>用 Quick Look 预览</name>
+  <unique-id>quicklook-preview</unique-id>
+  <command>@QUICKLOOK_CLI@ --show %F</command>
+  <description>预览选中的文件，空格关闭</description>
+  <patterns>*</patterns>
+  <directories/>
+  <audio-files/>
+  <image-files/>
+  <other-files/>
+  <text-files/>
+  <video-files/>
+</action>

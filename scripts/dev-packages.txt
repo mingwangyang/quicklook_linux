@@ -1,0 +1,51 @@
+# Linux Mint 22.3 / Ubuntu 24.04 Noble: build tools
+build-essential
+pkg-config
+cmake
+meson
+ninja-build
+curl
+ca-certificates
+git
+
+# GTK4 / native Wayland / GPU
+libgtk-4-dev
+libglib2.0-dev
+libglib2.0-dev-bin
+libepoxy-dev
+libegl1-mesa-dev
+libwayland-dev
+libxkbcommon-dev
+librsvg2-dev
+
+# P0 preview backends
+libgtksourceview-5-dev
+libpoppler-glib-dev
+libmpv-dev
+libarchive-dev
+
+# P1 formats / large images / HTML / fonts
+libwebkitgtk-6.0-dev
+libheif-dev
+libheif-plugin-libde265
+libheif-plugin-aomdec
+libraw-dev
+libjxl-dev
+libtiff-dev
+libvips-dev
+libfontconfig-dev
+libfreetype-dev
+liblcms2-dev
+
+# Media, diagnostics, and desktop integration
+# Keep the existing JACK2 implementation; apt's JACK1 alternative removes Wine.
+libjack-jackd2-dev
+libva-dev
+mesa-va-drivers
+ffmpeg
+ghostscript
+fzf
+wl-clipboard
+wayland-utils
+vainfo
+dbus-user-session

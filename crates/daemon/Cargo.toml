@@ -1,0 +1,43 @@
+[package]
+name = "quicklook-viewer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "GTK4 preview window with format backends and the settings app"
+
+[dependencies]
+flate2 = "1"
+quicklook-core = { path = "../core" }
+gtk4.workspace = true
+gdk4.workspace = true
+gio.workspace = true
+glib.workspace = true
+sourceview5.workspace = true
+webkit6.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+poppler = { package = "poppler-rs", version = "0.26" }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "gif", "webp", "bmp", "ico", "tiff"] }
+pulldown-cmark = "0.13"
+tempfile = "3"
+lru = "0.16"
+libloading = "0.9"
+libc = "0.2"
+toml = "1.1"
+serde_yaml = "0.9"
+roxmltree = "0.21"
+ttf-parser = "0.25"
+kamadak-exif = "0.6"
+encoding_rs = "0.8"
+natord = "1"
+
+[[bin]]
+name = "quicklook-settings"
+path = "src/settings.rs"
+
+[build-dependencies]
+pkg-config = "0.3"

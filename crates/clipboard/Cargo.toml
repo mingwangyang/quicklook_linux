@@ -1,0 +1,13 @@
+[package]
+name = "quicklook-clipboard"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Detached process holding the Wayland clipboard for copy-file"
+
+[dependencies]
+anyhow.workspace = true
+wl-clipboard-rs = "=0.9.4"

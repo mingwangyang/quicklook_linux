@@ -1,0 +1,21 @@
+[package]
+name = "quicklook-caja"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "LD_PRELOAD adapter hooking Caja's Space preview"
+
+[lib]
+name = "quicklook_caja"
+crate-type = ["cdylib"]
+
+[dependencies]
+quicklook-core = { path = "../core" }
+gio.workspace = true
+glib.workspace = true
+anyhow.workspace = true
+libloading = "0.9"
+libc = "0.2"

@@ -1,0 +1,29 @@
+[package]
+name = "quicklook"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "quicklook CLI, quicklookd resident service and Nautilus bridge"
+
+[[bin]]
+name = "quicklook"
+path = "src/main.rs"
+
+[[bin]]
+name = "quicklookd"
+path = "src/service.rs"
+
+[[bin]]
+name = "quicklook-nautilus-bridge"
+path = "src/nautilus.rs"
+
+[dependencies]
+quicklook-core = { path = "../core" }
+gio.workspace = true
+glib.workspace = true
+anyhow.workspace = true
+serde_json.workspace = true
+clap = { version = "4", features = ["derive"] }

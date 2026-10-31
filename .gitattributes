@@ -1,0 +1,5 @@
+# 本项目面向 Linux，统一 LF；二进制资源不做转换
+* text=auto eol=lf
+*.png binary
+*.gz binary
+*.ico binary

@@ -1,0 +1,16 @@
+[Desktop Entry]
+Type=Application
+Name=Quick Look
+Comment=Preview local files
+Comment[zh_CN]=预览本地文件
+Exec=quicklook --show %U
+Icon=org.quicklook.Preview
+Terminal=false
+Categories=Utility;Viewer;
+StartupNotify=false
+Actions=Settings;
+
+[Desktop Action Settings]
+Name=Settings and file manager integration
+Name[zh_CN]=设置与文件管理器接入
+Exec=quicklook --settings

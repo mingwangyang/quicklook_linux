@@ -1,0 +1,17 @@
+[package]
+name = "quicklook-environment-check"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+publish = false
+
+[features]
+full = ["dep:sourceview5", "dep:webkit6"]
+
+[dependencies]
+gtk4 = { version = "=0.11.5", features = ["v4_14"] }
+sourceview5 = { version = "=0.11.2", features = ["v5_12"], optional = true }
+webkit6 = { version = "=0.6.1", optional = true }
+
+[build-dependencies]
+pkg-config = "0.3"

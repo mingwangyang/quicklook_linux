@@ -1,0 +1,15 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: Quick Look Linux
+# TODO(开源): 公开托管后替换为实际仓库地址
+Source: https://github.com/TODO-OWNER/quick_look_linux
+
+Files: *
+Copyright: 2026 Quick Look Linux contributors
+License: GPL-3+
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+ .
+ On Debian systems, the full text of the GNU General Public License
+ version 3 can be found in /usr/share/common-licenses/GPL-3.
