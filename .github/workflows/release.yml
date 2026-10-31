@@ -1,0 +1,64 @@
+name: Release
+
+# 发版流程：打标签 Vx.y.z 推到 GitHub → 本工作流自动构建 deb 并附到 Release。
+# 注意推送纪律：标签只随 main 推送（git push origin main <tag>），dev 永不上 GitHub。
+
+on:
+  push:
+    tags: ['V*']
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-deb:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          pkgs=$(grep -vE '^\s*(#|$)' scripts/dev-packages.txt \
+                 | grep -vE '^(fzf|wayland-utils|vainfo|mesa-va-drivers|dbus-user-session)$' \
+                 | tr '\n' ' ')
+          sudo apt-get --no-remove install --no-install-recommends $pkgs
+          sudo apt-get install -y dpkg-dev lintian
+
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install 1.99.1 --profile minimal --component rustfmt,clippy
+          rustup default 1.99.1
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Run test suite
+        run: cargo test --locked --workspace
+
+      - name: Build deb
+        run: python3 scripts/build-deb.py
+
+      - name: Lint (non-fatal)
+        run: lintian --fail-on error dist/*.deb || true
+
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum *.deb > deb.sha256 && cat deb.sha256
+
+      - name: Read tag version
+        id: ver
+        run: echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          files: |
+            dist/*.deb
+            dist/deb.sha256
+          fail_on_unmatched: true
