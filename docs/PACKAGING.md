@@ -1,8 +1,9 @@
 # deb 安装与分发
 
-当前应用版本为 **V0.0.9**（`Cargo.toml` 的 `version` 字段）。deb 版本与应用版本完全一致，不再带 `-N` 修订后缀：
+当前应用版本为 **V0.0.10**（`Cargo.toml` 的 `version` 字段）。deb 版本与应用版本完全一致，不再带 `-N` 修订后缀：
 应用版本从 0.0.1 走到 0.0.3，托盘右键菜单新增「关于 Quick Look」（弹窗里写版本号）；
 0.0.9 X11 会话下预览窗口保持最上层（EWMH _NET_WM_STATE_ABOVE）；
+0.0.10 修「单页模式」按钮被默认连续滚动顶回的回归；
 0.0.8 PDF 连续滚动模式下 Page Up / Page Down 真正翻页（一次一屏，缩放后不漂移）；单页模式仍是换页；
 0.0.7 PDF 默认连续滚动并按页缩放；全屏显示「按 F / Esc 退出」提示并修好 F 还原失灵；设置窗口分类导航、可调默认窗口大小、一键自动检测文件管理器；PDF 右键拖动平移；
 0.0.6 修「空格有时候关不掉」：把「自动重复」判定从 400ms 收紧到 150ms，窗口尚未画出时的第二次 Toggle 直接关闭；
@@ -24,7 +25,7 @@ python3 scripts/build-deb.py            # 版本号取自 Cargo.toml，不再传
 ## 安装
 
 ```bash
-sudo apt install ./dist/quicklook_V0.0.9_amd64.deb
+sudo apt install ./dist/quicklook_V0.0.10_amd64.deb
 # 装完补上用户级接入（文件管理器 + niri 窗口规则）
 quicklook --apply-hosts
 ```

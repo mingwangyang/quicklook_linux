@@ -114,6 +114,10 @@ struct State {
     pages: i32,
     pdf_thumbnails: bool,
     pdf_continuous: bool,
+    /// 用户显式选择的连续/单页模式；Some 时不再按配置自动切换。
+    pdf_user_mode: Option<bool>,
+    /// 用户上次显式选择模式时打开的文件，换文件后自动切换恢复生效。
+    pdf_user_file: Option<String>,
     /// PDF 连续滚动模式下所有页共享的缩放倍数。
     pdf_zoom: f64,
     /// 连续模式下已挂载的页 canvas（弱引用），缩放时统一更新。
@@ -302,6 +306,8 @@ impl Controller {
                 pages: 0,
                 pdf_thumbnails: false,
                 pdf_continuous: false,
+                pdf_user_mode: None,
+                pdf_user_file: None,
                 pdf_zoom: 1.0,
                 pdf_pages: Vec::new(),
                 pdf_aspect: 1.0,
@@ -487,7 +493,7 @@ if let Some(c)=weak.upgrade(){clear(&menu_box);if let Some(info)=c.displayed(){f
             "Action" => {
                 let (action,) = parameters.get::<(String,)>().context("需要动作名称")?;
                 if action == "continuous" {
-                    self.toggle_pdf_continuous();
+                    self.toggle_pdf_continuous(true);
                     return Ok(None);
                 }
                 if action == "detach" {
@@ -707,13 +713,20 @@ if let Some(c)=weak.upgrade(){clear(&menu_box);if let Some(info)=c.displayed(){f
         self.state.borrow_mut().nested.clear();
         let generation = self.state.borrow().generation;
         let key = spec.key(&info);
+        let file_key = info.key();
         {
             let mut s = self.state.borrow_mut();
+            let same_file =
+                s.current.as_ref().map(|c| c.key()).as_deref() == Some(file_key.as_str());
             s.current = Some(info.clone());
             s.page = spec.page;
             s.pages = 0;
             s.pdf_continuous = false;
             s.pdf_scroll = None;
+            if !same_file {
+                s.pdf_user_mode = None;
+                s.pdf_user_file = None;
+            }
             s.grid = false;
         }
         self.title.set_text(&info.name);
@@ -1505,7 +1518,7 @@ if let Some(c)=weak.upgrade(){clear(&menu_box);if let Some(info)=c.displayed(){f
             .as_ref()
             .map(|p| p.info.clone())
             .or_else(|| s.current.clone());
-        serde_json::json!({"version":quicklook_core::VERSION,"running":true,"picker_open":self.picker.borrow().is_some(),"visible":self.window.is_visible(),"backend":self.backend(),"app_id":APP_ID,"pinned":s.pinned,"detached":s.detached,"fullscreen":self.fullscreen.get(),"ready":s.ready,"grid":s.grid,"generation":s.generation,"file":file,"selection_count":s.selection.len(),"sequence_count":s.sequence.len(),"page":s.page+1,"pages":s.pages,"cache_entries":s.cache.len(),"cache_bytes":s.cache_bytes,"cache_hits":s.cache_hits,"request_to_content_ms":s.last_elapsed_ms,"error":s.last_error,"media":s.active.media.as_ref().map(MediaView::status),"image":s.active.canvas.as_ref().map(Canvas::detail_status),"animation_frames":s.active.animation_frames.get(),"animation_paused":s.active.paused.get(),"pdf_continuous":s.pdf_continuous,"pdf_zoom":s.pdf_zoom,"pdf_thumbnails":s.pdf_thumbnails,"body":s.prepared.as_ref().map(|p|body_name(&p.body)).unwrap_or(""),"mermaid":s.mermaid,"nested_depth":s.nested.len(),"nested_path":s.nested.iter().map(|p|p.info.name.clone()).chain(s.prepared.as_ref().map(|p|p.info.name.clone())).collect::<Vec<_>>()})
+        serde_json::json!({"version":quicklook_core::VERSION,"running":true,"picker_open":self.picker.borrow().is_some(),"visible":self.window.is_visible(),"backend":self.backend(),"app_id":APP_ID,"pinned":s.pinned,"detached":s.detached,"fullscreen":self.fullscreen.get(),"ready":s.ready,"grid":s.grid,"generation":s.generation,"file":file,"selection_count":s.selection.len(),"sequence_count":s.sequence.len(),"page":s.page+1,"pages":s.pages,"cache_entries":s.cache.len(),"cache_bytes":s.cache_bytes,"cache_hits":s.cache_hits,"request_to_content_ms":s.last_elapsed_ms,"error":s.last_error,"media":s.active.media.as_ref().map(MediaView::status),"image":s.active.canvas.as_ref().map(Canvas::detail_status),"animation_frames":s.active.animation_frames.get(),"animation_paused":s.active.paused.get(),"pdf_continuous":s.pdf_continuous,"pdf_user_mode":s.pdf_user_mode,"pdf_zoom":s.pdf_zoom,"pdf_thumbnails":s.pdf_thumbnails,"body":s.prepared.as_ref().map(|p|body_name(&p.body)).unwrap_or(""),"mermaid":s.mermaid,"nested_depth":s.nested.len(),"nested_path":s.nested.iter().map(|p|p.info.name.clone()).chain(s.prepared.as_ref().map(|p|p.info.name.clone())).collect::<Vec<_>>()})
     }
     fn error(&self, error: &str) {
         clear(&self.content);

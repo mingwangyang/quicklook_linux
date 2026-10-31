@@ -302,4 +302,4 @@ Nemo 改键为什么又能注入：GTK 的 **key snooper**（`gtk_key_snooper_in
 
 用户通过终端输入 caja 启动，旧版启动器覆盖没有覆盖这个入口。现在复用 python3-caja 用户扩展，在模块导入时通过 ctypes 调用 Rust 库的 quicklook_caja_install；加载不依赖预先点击右键菜单。Rust 核对进程与接管配置，再安装同一个 GTK 按键处理器；共享 GtkSettings 标记避免两份库同时安装重复回调，模块保持驻留。没有 python3-caja 时显式启动器继续可用。
 
-本机已有 python3-caja 1.26.0，未新增系统包，也没有同名 PATH 替换。用户已确认普通 caja 命令恢复。当前 134 项 Rust 测试；原始命令、菜单和双加载连续按键测试与扩展方式完整 Caja 回归通过。当前应用版本为 V0.0.9，包文件为 quicklook_V0.0.9_amd64.deb（托盘右键新增「关于」并显示版本号）。
+本机已有 python3-caja 1.26.0，未新增系统包，也没有同名 PATH 替换。用户已确认普通 caja 命令恢复。当前 134 项 Rust 测试；原始命令、菜单和双加载连续按键测试与扩展方式完整 Caja 回归通过。当前应用版本为 V0.0.10，包文件为 quicklook_V0.0.10_amd64.deb（托盘右键新增「关于」并显示版本号）。
