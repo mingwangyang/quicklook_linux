@@ -180,7 +180,7 @@ pub fn apply_at_with(
     config_home: &Path,
     dry_run: bool,
 ) -> Result<Report> {
-    apply_at_impl(config, prefix, data, config_home, dry_run, None)
+    apply_at_impl(config, prefix, data, config_home, dry_run, None, None)
 }
 
 fn apply_at_impl(
@@ -190,6 +190,7 @@ fn apply_at_impl(
     config_home: &Path,
     dry_run: bool,
     nemo_bin: Option<&Path>,
+    nemo_fp: Option<u64>,
 ) -> Result<Report> {
     let mut report = Report {
         dry_run,
@@ -215,7 +216,7 @@ fn apply_at_impl(
     } else {
         remove(&nemo, &mut report)?;
     }
-    apply_nemo_at(config, prefix, data, &mut report, nemo_bin)?;
+    apply_nemo_at(config, prefix, data, &mut report, nemo_bin, nemo_fp)?;
     // niri 窗口规则决定预览是浮动还是被平铺，deb 安装不碰用户配置，只能由这里维护。
     let any_host = config.host_nemo
         || config.host_dolphin
@@ -422,8 +423,17 @@ pub(crate) fn apply_for_test(
     data: &Path,
     config_home: &Path,
     nemo_bin: Option<&Path>,
+    nemo_fp: u64,
 ) -> Result<Report> {
-    apply_at_impl(config, prefix, data, config_home, false, nemo_bin)
+    apply_at_impl(
+        config,
+        prefix,
+        data,
+        config_home,
+        false,
+        nemo_bin,
+        Some(nemo_fp),
+    )
 }
 
 fn apply_nemo_at(
@@ -432,6 +442,7 @@ fn apply_nemo_at(
     data: &Path,
     report: &mut Report,
     binary: Option<&Path>,
+    nemo_fp: Option<u64>,
 ) -> Result<()> {
     let library = prefix.join("lib/quicklook/libquicklook_nemo.so");
     let launcher = launcher_path(data, "nemo");
@@ -457,7 +468,7 @@ fn apply_nemo_at(
 
     let remap =
         config.host_nemo && config.hijack_native && config.nemo_key() != PreviewKey::default();
-    let expected = VERIFIED_NEMO_FINGERPRINT;
+    let expected = nemo_fp.unwrap_or(VERIFIED_NEMO_FINGERPRINT);
     let pin = std::fs::read(binary.unwrap_or(Path::new("/usr/bin/nemo")))
         .ok()
         .filter(|bytes| cfg!(target_arch = "x86_64") && fnv1a(bytes) == expected)
@@ -1536,10 +1547,11 @@ mod tests {
     }
     /// 写一个伪 nemo 二进制并返回路径；调用 apply_for_test 时显式传入，
     /// 让改键→装旁路器的完整链路在没有真实 Nemo 的机器（CI）上也能验证。
-    fn install_fake_nemo(prefix: &std::path::Path) -> std::path::PathBuf {
+    fn install_fake_nemo(prefix: &std::path::Path) -> (std::path::PathBuf, u64) {
         let path = prefix.join("fake-nemo");
-        std::fs::write(&path, b"libnemo placeholder for fingerprint test").unwrap();
-        path
+        let bytes = b"libnemo placeholder for fingerprint test";
+        std::fs::write(&path, bytes).unwrap();
+        (path, fnv1a(bytes))
     }
 
     fn setup() -> (tempfile::TempDir, PathBuf, PathBuf, PathBuf) {
@@ -1760,7 +1772,7 @@ mod tests {
     #[test]
     fn per_host_keys_override_only_their_own_host() {
         let (_root, prefix, data, config_home) = setup();
-        let fake_nemo = install_fake_nemo(&prefix);
+        let (fake_nemo, fake_fp) = install_fake_nemo(&prefix);
         let config = Config {
             preview_key: "Ctrl+Space".into(),
             preview_key_nemo: "F3".into(),
@@ -1768,7 +1780,15 @@ mod tests {
             preview_key_nautilus: "Alt+F7".into(),
             ..enabled()
         };
-        apply_for_test(&config, &prefix, &data, &config_home, Some(&fake_nemo)).unwrap();
+        apply_for_test(
+            &config,
+            &prefix,
+            &data,
+            &config_home,
+            Some(&fake_nemo),
+            fake_fp,
+        )
+        .unwrap();
         let keymap = std::fs::read_to_string(config_home.join("yazi/keymap.toml")).unwrap();
         assert!(keymap.contains("on = \"<F6>\""), "{keymap}");
         assert!(!keymap.contains("<C-Space>"), "{keymap}");
@@ -1783,7 +1803,15 @@ mod tests {
             preview_key_nautilus: String::new(),
             ..config.clone()
         };
-        apply_for_test(&following, &prefix, &data, &config_home, Some(&fake_nemo)).unwrap();
+        apply_for_test(
+            &following,
+            &prefix,
+            &data,
+            &config_home,
+            Some(&fake_nemo),
+            fake_fp,
+        )
+        .unwrap();
         let keymap = std::fs::read_to_string(config_home.join("yazi/keymap.toml")).unwrap();
         assert!(keymap.contains("on = \"<C-Space>\""), "{keymap}");
         let accels = std::fs::read_to_string(config_home.join("nautilus/scripts-accels")).unwrap();
@@ -2277,13 +2305,20 @@ mod tests {
     #[test]
     fn nemo_custom_key_installs_interceptor_and_restores_default() {
         let (_root, prefix, data, config_home) = setup();
-        let fake_nemo = install_fake_nemo(&prefix);
+        let (fake_nemo, fake_fp) = install_fake_nemo(&prefix);
         let config = Config {
             preview_key: "Ctrl+Space".into(),
             ..enabled()
         };
-        let report =
-            apply_for_test(&config, &prefix, &data, &config_home, Some(&fake_nemo)).unwrap();
+        let report = apply_for_test(
+            &config,
+            &prefix,
+            &data,
+            &config_home,
+            Some(&fake_nemo),
+            fake_fp,
+        )
+        .unwrap();
         let launcher = launcher_path(&data, "nemo");
         let script = std::fs::read_to_string(&launcher).unwrap();
         assert!(script.contains("LD_PRELOAD="));
