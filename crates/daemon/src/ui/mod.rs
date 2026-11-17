@@ -727,7 +727,7 @@ if let Some(c)=weak.upgrade(){clear(&menu_box);if let Some(info)=c.displayed(){f
         self.state.borrow_mut().shown_at = Instant::now();
         self.space_held.set(false);
         if infos.len() > 1 {
-            self.window.present();
+            self.present_preview();
             self.show_grid(infos);
         } else {
             // 单文件先算尺寸再显示：GTK4 的 set_default_size 对已映射窗口无效，
@@ -746,6 +746,42 @@ if let Some(c)=weak.upgrade(){clear(&menu_box);if let Some(info)=c.displayed(){f
         }
         Ok(())
     }
+    /// 显示预览窗，并显式请求键盘焦点。
+    ///
+    /// `present()` 在部分 Wayland 合成器上只负责映射窗口，不会把键盘焦点从文件
+    /// 管理器转过来；用户必须先点一下预览窗，下一次空格才会落到 viewer 的按键处理。
+    /// 这里同时调用 GTK 的焦点请求和 GDK toplevel 的 focus，并在一小段延迟后重试，
+    /// 覆盖窗口刚映射、niri 还没应用完窗口规则的时间窗。
+    fn present_preview(&self) {
+        self.window.present();
+        self.focus_preview();
+        let window = self.window.downgrade();
+        glib::timeout_add_local_once(Duration::from_millis(120), move || {
+            if let Some(window) = window.upgrade() {
+                window.set_can_focus(true);
+                window.grab_focus();
+                if let Some(toplevel) = window
+                    .surface()
+                    .and_then(|s| s.downcast::<gdk::Toplevel>().ok())
+                {
+                    toplevel.focus(gdk::CURRENT_TIME);
+                }
+            }
+        });
+    }
+
+    fn focus_preview(&self) {
+        self.window.set_can_focus(true);
+        self.window.grab_focus();
+        if let Some(toplevel) = self
+            .window
+            .surface()
+            .and_then(|s| s.downcast::<gdk::Toplevel>().ok())
+        {
+            toplevel.focus(gdk::CURRENT_TIME);
+        }
+    }
+
     fn size_window(&self, aspect: Option<f64>) {
         let monitors = gtk4::prelude::WidgetExt::display(&self.window).monitors();
         let monitor = self
@@ -1673,7 +1709,7 @@ if let Some(c)=weak.upgrade(){clear(&menu_box);if let Some(info)=c.displayed(){f
         s.last_elapsed_ms = s.request_start.elapsed().as_secs_f64() * 1000.;
         drop(s);
         if !self.window.is_visible() {
-            self.window.present();
+            self.present_preview();
         }
     }
 }

@@ -1,8 +1,9 @@
 # deb 安装与分发
 
-当前应用版本为 **V0.0.14**（`Cargo.toml` 的 `version` 字段）。deb 版本与应用版本完全一致，不再带 `-N` 修订后缀：
+当前应用版本为 **V0.0.15**（`Cargo.toml` 的 `version` 字段）。deb 版本与应用版本完全一致，不再带 `-N` 修订后缀：
 应用版本从 0.0.1 走到 0.0.3，托盘右键菜单新增「关于 Quick Look」（弹窗里写版本号）；
 0.0.9 X11 会话下预览窗口保持最上层（EWMH _NET_WM_STATE_ABOVE）；
+0.0.15 预览窗口首次呈现时显式请求键盘焦点（GTK grab + GDK toplevel focus，120ms 后重试），修复「空格唤起后必须先点一下才能空格关闭」；
 0.0.14 修「空格唤起后必须鼠标点一下才能关闭」：首次 Toggle 不再被 viewer 启动 1.5 秒内的 inflight 判定误判为连按并立即关闭；Thunar/Caja 适配器只在自身窗口处于活动状态时处理空格，避免预览已获得焦点后宿主重复触发开关；
 0.0.13 修「不止 PDF」的空格关闭：音频/视频控制栏去掉会弹出独立表面的下拉框（倍速、可视化改循环按钮）；窗口可见时任何 Toggle 都关闭；Thunar/Caja/Nemo 适配器在空格按下时先问 broker，焦点在路径栏/搜索框也能关；
 0.0.12 修「有时候空格关闭不了」：焦点在 PDF 页码输入框等输入控件时，空格同样关闭预览；
@@ -29,7 +30,7 @@ python3 scripts/build-deb.py            # 版本号取自 Cargo.toml，不再传
 ## 安装
 
 ```bash
-sudo apt install ./dist/quicklook_V0.0.14_amd64.deb
+sudo apt install ./dist/quicklook_V0.0.15_amd64.deb
 # 装完补上用户级接入（文件管理器 + niri 窗口规则）
 quicklook --apply-hosts
 ```

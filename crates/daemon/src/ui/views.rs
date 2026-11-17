@@ -271,7 +271,7 @@ impl Controller {
         self.format_bar
             .set_visible(self.format_bar.first_child().is_some());
         if !self.window.is_visible() {
-            self.window.present();
+            self.present_preview();
         }
         self.window.queue_resize();
     }

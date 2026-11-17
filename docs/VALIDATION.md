@@ -842,3 +842,17 @@ let inflight = {
 - Thunar / Caja 适配器在 `snoop` 开头检查 `gtk_widget_get_toplevel(widget)` 且 `gtk_window_is_active(top)`；只有宿主窗口自身处于活动状态才处理空格。预览窗口获得焦点后，即使合成器把同一串按键也投递给宿主，宿主也不会再执行一次「关闭 + 打开」，避免预览被换成下一个文件。
 
 **验证**：私有 D-Bus 会话里用 `target/release/quicklookd` 直接 `Toggle file:///tmp/ql99/thunar.png`，返回 `visible=true body=image`，窗口 `thunar.png — Quick Look` 获得焦点；随后 `ydotool type ' '` 返回 `visible=false`，首次打开与空格关闭均正常。139 项测试、clippy 0 警告、fmt 干净。
+
+## 修「空格唤起后必须先鼠标点一下才能空格关闭」（0.0.15）
+
+**现象**：从 Thunar 按空格打开预览后，预览窗口显示出来且看起来是活动窗口，但第一次按空格没有关闭；鼠标点击预览窗口任意位置后，空格才恢复关闭。0.0.14 的 Toggle inflight 修复与宿主 active guard 均在位。
+
+**根因**：单文件预览为了按图片/PDF 页面比例确定窗口大小，`show()` 不在开始时 `present()`，而是等首帧 `render()` 完成后再 `present()`。GTK4 的 `present()` 在 niri 下只负责映射窗口；`open-focused` 规则在窗口首次映射时可能还没应用完，窗口虽然显示出来，键盘焦点仍留在 Thunar。空格因此被宿主接收，viewer 的 `space_held` 没有机会置位。
+
+**修法**：`crates/daemon/src/ui/mod.rs` 新增 `present_preview()` / `focus_preview()`：
+- `window.present()` 后立即 `set_can_focus(true)`、`grab_focus()`；
+- 通过 `window.surface().downcast::<gdk::Toplevel>()` 调 `toplevel.focus(gdk::CURRENT_TIME)`；
+- 120ms 后重试一次，覆盖 niri 应用窗口规则与首帧布局的时间窗；
+- `show()` 多文件分支、`render()` 首帧、`error()` 全部改走 `present_preview()`。
+
+**验证**：私有 D-Bus 会话启动 `target/release/quicklook-viewer`，`Show` 图片后 `niri msg --json focused-window` 为 `thunar.png — Quick Look` / `org.quicklook.Preview` / `is_focused: true`；139 项测试、clippy 0 警告、fmt 干净。
