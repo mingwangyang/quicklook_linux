@@ -446,19 +446,19 @@ fn release_key(key: u32) {
     });
 }
 fn process_key(window: Pointer, key: u32, modifiers: u32) -> bool {
-    // 预览已经开着时，空格优先关闭；即使焦点不在文件视图（路径栏、搜索框）
-    // 也能生效。这里先问 broker，避免依赖 view_for_window 的焦点判定。
     let wanted = preview_key();
     let pressed = modifiers & (1 | 4 | 8 | 64 | 0x4000000);
-    if pressed & !wanted.x11_modifiers() == 0
-        && key == wanted.keyval()
-        && quicklook_core::protocol::preview_visible()
-    {
-        STATE.with(|s| s.borrow_mut().visible = false);
-        send("Close", &().to_variant());
-        return true;
-    }
     let Some(view) = view_for_window(window) else {
+        // 焦点在路径栏、搜索框等不属于视图的控件上时才问 broker；正常在
+        // 文件视图里直接走 Toggle，避免每次按键都做同步 D-Bus Status。
+        if pressed & !wanted.x11_modifiers() == 0
+            && key == wanted.keyval()
+            && quicklook_core::protocol::preview_visible()
+        {
+            STATE.with(|s| s.borrow_mut().visible = false);
+            send("Close", &().to_variant());
+            return true;
+        }
         return false;
     };
     process_key_view(view, key, modifiers)

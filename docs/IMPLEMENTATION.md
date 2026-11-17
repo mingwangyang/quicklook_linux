@@ -6,7 +6,7 @@
 |---|---|
 | crates/core | 文件 URI/MIME、自然排序、配置、编码分段读取、DBus 协议；统一预览键与宿主集成落地（keys.rs / hosts.rs） |
 | crates/cli | quicklook 和轻量 quicklookd；常驻部分只依赖 GIO |
-| crates/daemon | 按需启动 GTK4 预览窗口；关闭清空缓存，默认 3 秒后退出。另有 quicklook-settings 设置窗口 |
+| crates/daemon | 按需启动 GTK4 预览窗口；关闭清空缓存，默认 30 秒后退出。另有 quicklook-settings 设置窗口 |
 | crates/clipboard | 独立轻量 Wayland 剪贴板持有程序，提供 GNOME/KDE 文件 MIME，关闭窗口后仍可粘贴 |
 | crates/nemo-adapter | Rust 动态库，读取 Nemo 真实多选与文件视图按键；GTK3 留在 Nemo，GTK4 在独立进程。默认空格由 broker 的原生 `org.nemo.Preview` 处理；改键后启动器加载本库，用 GTK key snooper 在视图消费按键前接管 |
 | crates/caja-adapter | Caja（MATE）的空格旁路器，与 Thunar 适配器共用 `core::keys` 的按键状态机；用 `dlsym(RTLD_DEFAULT, ...)` 查 Caja 自己 `.dynsym` 里的视图与选择符号，符号查不到就不装旁路器。选择列表按 transfer-full 交给 `caja_file_list_free` 释放 |
@@ -101,7 +101,7 @@ Office 与包内浏览可以叠加：zip 里的 docx 直接按 Office 渲染，�
 cache_mb = 200
 image_max_edge = 2560
 idle_timeout_secs = 600
-viewer_grace_secs = 3
+viewer_grace_secs = 30
 text_chunk_bytes = 262144
 max_text_buffer_bytes = 8388608
 max_archive_entries = 10000
@@ -123,7 +123,7 @@ nemo_compat = false
 
 按键解析集中在 `keys::PreviewKey`（只接受 `Space/Return/F1-F12` 加 `Ctrl/Shift/Alt`，字母 keyval 会随 Shift 层变化所以不支持）。`Config::key()` 是全局默认，`nemo_key()` / `thunar_key()` / `yazi_key()` / `nautilus_key()` 是各宿主的实际按键：覆盖为空或解析失败就跟随全局。写入侧一一对应——`apply_nemo` 用 `nemo_key()` 判断是否要装旁路器启动器，`apply_yazi_keymap` 用 `yazi_key()` 生成 `on = "<...>"`，`apply_accels` 用 `nautilus_key()` 生成 `scripts-accels`；读取侧 Nemo / Thunar 适配器在进程启动时各取自己的键并缓存（`PREVIEW_KEY` / `OnceLock`），所以改键要重启对应文件管理器。新增宿主入口时必须同时接上这两侧，否则会出现「设置里改了 Yazi，实际改了所有宿主」。
 
-cache_mb 是解码缓存预算，纹理、WebKit、解码器还会另占内存。隐藏窗口回收后只留 broker，空闲 10 分钟 broker 退出。viewer_grace_secs 可设 0–30。
+cache_mb 是解码缓存预算，纹理、WebKit、解码器还会另占内存。隐藏窗口回收后只留 broker，空闲 10 分钟 broker 退出。viewer_grace_secs 可设 3–600。
 
 解压暂存位于 ~/.cache/quicklook/extracted/，单文件默认 128MiB，总量 512MiB 保护；下一次启动清理超过一天的本项目目录，保证默认应用/剪贴板在关闭窗口后仍可读取。EPS 位于 ~/.cache/quicklook/eps/，退出服务后可手动清理。
 
@@ -156,7 +156,7 @@ org.quicklook.Viewer 为内部接口。可选 nemo_compat=true 提供旧 org.nem
 
 常驻的 `quicklookd` 在拿到 org.quicklook.Preview 之后，顺手把 `org.kde.StatusNotifierItem` 和 `com.canonical.dbusmenu` 两个对象挂到同一条连接上，总线名是 `org.kde.StatusNotifierItem-<pid>-1`，路径 `/StatusNotifierItem` 与 `/MenuBar`，再调用 watcher 的 `RegisterStatusNotifierItem` 登记。选 StatusNotifierItem 而不是老的 XEmbed 托盘，是因为 Wayland 下没有 XEmbed，niri + noctalia 这条链路只认 SNI。
 
-放在 broker 而不是预览进程：预览进程有 3 秒空闲就退出，托盘图标会跟着闪没；broker 是常驻的，生命周期正好对得上。
+放在 broker 而不是预览进程：预览进程有 30 秒空闲就退出，托盘图标会跟着闪没；broker 是常驻的，生命周期正好对得上。
 
 图标用应用自己的彩色图标（`org.quicklook.Preview`，蓝底白色文档 + 放大镜），不用主题图标名。图形刻意不是单纯的放大镜——单独一个镜片在面板里和「搜索」无法区分，配上文档轮廓才读得出是预览。这版是占位设计，正式图标等交互收尾后再做。理由有两条：一是颜色自己说了算，图标带底板，浅色与深色主题下观感一致，不必依赖宿主把 symbolic 图标重新着色、也不必依赖它以 -dark 主题重新解析名字；二是和桌面条目、窗口图标同源，用户在两处看到的是同一个标志。`IconPixmap` 老实返回空数组：实测宿主不读 pixmap，把像素改成纯洋红后截图与改动前逐像素相同。
 

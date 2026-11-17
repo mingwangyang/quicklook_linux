@@ -68,7 +68,7 @@ impl Default for Config {
             cache_mb: 200,
             image_max_edge: 2560,
             idle_timeout_secs: 600,
-            viewer_grace_secs: 3,
+            viewer_grace_secs: 30,
             text_chunk_bytes: 256 * 1024,
             max_text_buffer_bytes: 8 * 1024 * 1024,
             max_archive_entries: 10_000,
@@ -234,7 +234,7 @@ impl Config {
         }
         .into();
         self.cache_mb = self.cache_mb.clamp(8, 2048);
-        self.viewer_grace_secs = self.viewer_grace_secs.min(30);
+        self.viewer_grace_secs = self.viewer_grace_secs.clamp(3, 600);
         self.image_max_edge = self.image_max_edge.clamp(256, 8192);
         // 0 表示自动；其余夹到合理范围，避免手改配置把窗口写成 0x0 或超出屏幕。
         if self.window_width != 0 {

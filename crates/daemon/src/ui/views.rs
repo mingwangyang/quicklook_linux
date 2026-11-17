@@ -1022,6 +1022,10 @@ impl Controller {
                 }
             });
         });
+        // WebKit 有独立的键盘焦点链；只在窗口上挂控制器时，Markdown 渲染
+        // 过程会把空格按下/抬起都吞掉。给 WebView 也挂一份窗口同款控制器。
+        self.install_preview_keys(&view);
+        view.set_focusable(false);
         let weak = Rc::downgrade(self);
         glib::timeout_add_local_once(Duration::from_secs(15), move || {
             if let Some(c) = weak.upgrade() {

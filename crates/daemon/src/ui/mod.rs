@@ -234,6 +234,9 @@ impl Controller {
         content.set_vexpand(true);
         content.set_hexpand(true);
         content.add_css_class("preview-bg");
+        // 点击标题栏/格式栏时 GTK 会把焦点交给按钮；让内容本身可聚焦，
+        // 由下面的点击控制器把焦点收回来，空格始终由预览窗口处理。
+        content.set_focusable(true);
         let main_area = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
         main_area.set_vexpand(true);
         main_area.append(&content);
@@ -400,25 +403,27 @@ impl Controller {
                     }
                 }
             });
-        let key = gtk4::EventControllerKey::new();
-        key.set_propagation_phase(gtk4::PropagationPhase::Capture);
-        let weak = Rc::downgrade(&controller);
-        key.connect_key_pressed(move |_, key, _, modifiers| {
-            weak.upgrade()
-                .map(|c| c.key(key, modifiers))
-                .unwrap_or(glib::Propagation::Proceed)
-        });
-        let weak = Rc::downgrade(&controller);
-        key.connect_key_released(move |_, key, _, _| {
-            if key == gdk::Key::space
-                && let Some(c) = weak.upgrade()
-                && c.space_held.replace(false)
-                && c.window.is_visible()
-            {
-                c.close_by_user();
-            }
-        });
-        controller.window.add_controller(key);
+        controller.install_preview_keys(&controller.window);
+        // 鼠标点过标题栏、格式栏或状态胶囊后，把焦点还给内容区；否则焦点可能
+        // 留在按钮上，用户再按空格时看起来像「空格失效」。这些区域不是
+        // content 的子控件，必须把手势分别挂到 header / format_bar / 胶囊上，
+        // 挂在 window 上收不到 titlebar 的事件。Capture 阶段保证按钮自己的
+        // 点击处理仍然先执行，延迟到 idle 再改焦点，不打断点击。
+        let refocus_on_click = |widget: &gtk4::Widget, content: &gtk4::Box| {
+            let click = gtk4::GestureClick::new();
+            click.set_propagation_phase(gtk4::PropagationPhase::Capture);
+            let content = content.clone();
+            click.connect_released(move |_, _, _, _| {
+                let content = content.clone();
+                glib::idle_add_local_once(move || {
+                    content.grab_focus();
+                });
+            });
+            widget.add_controller(click);
+        };
+        refocus_on_click(header.upcast_ref(), &controller.content);
+        refocus_on_click(controller.format_bar.upcast_ref(), &controller.content);
+        refocus_on_click(status_pill.upcast_ref(), &controller.content);
         // 焦点离开预览窗口时清掉「空格还按着」的记录：抬起事件可能落在别的窗口上，
         // 残留的 true 会让下一次按空格先被当成重复、白按一下。
         let focus = gtk4::EventControllerFocus::new();
@@ -752,6 +757,34 @@ if let Some(c)=weak.upgrade(){clear(&menu_box);if let Some(info)=c.displayed(){f
     /// 管理器转过来；用户必须先点一下预览窗，下一次空格才会落到 viewer 的按键处理。
     /// 这里同时调用 GTK 的焦点请求和 GDK toplevel 的 focus，并在一小段延迟后重试，
     /// 覆盖窗口刚映射、niri 还没应用完窗口规则的时间窗。
+    /// 在预览窗口和 WebView 上都安装同一套按键控制器。
+    ///
+    /// WebKit 会把键盘焦点吞到自己的子窗口里，只挂在窗口上的 Capture
+    /// 控制器在 Markdown 渲染时收不到 key release，空格就会「按下去有记录、
+    /// 抬不起来」，表现为关不掉。给 WebView 单独挂一份，保证 press/release
+    /// 都走同一个 `key()`/`space_held` 状态机。
+    fn install_preview_keys(self: &Rc<Self>, widget: &impl IsA<gtk4::Widget>) {
+        let key = gtk4::EventControllerKey::new();
+        key.set_propagation_phase(gtk4::PropagationPhase::Capture);
+        let weak = Rc::downgrade(self);
+        key.connect_key_pressed(move |_, key, _, modifiers| {
+            weak.upgrade()
+                .map(|c| c.key(key, modifiers))
+                .unwrap_or(glib::Propagation::Proceed)
+        });
+        let weak = Rc::downgrade(self);
+        key.connect_key_released(move |_, key, _, _| {
+            if key == gdk::Key::space
+                && let Some(c) = weak.upgrade()
+                && c.space_held.replace(false)
+                && c.window.is_visible()
+            {
+                c.close_by_user();
+            }
+        });
+        widget.add_controller(key);
+    }
+
     fn present_preview(&self) {
         self.window.present();
         self.focus_preview();

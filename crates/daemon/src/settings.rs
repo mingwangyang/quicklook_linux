@@ -903,8 +903,8 @@ fn render_section(
             2,
             "窗口空闲退出（秒）",
             config.viewer_grace_secs as f64,
-            1.,
-            30.,
+            3.,
+            600.,
             1.,
         ),
     ] {

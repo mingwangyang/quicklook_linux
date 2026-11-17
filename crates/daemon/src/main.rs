@@ -52,7 +52,7 @@ fn run() -> Result<()> {
     let mut initial: Vec<String> = Vec::new();
     for arg in &args {
         if let Some(value) = arg.strip_prefix("--idle-exit-ms=") {
-            hidden_exit_ms = Some(value.parse::<u64>()?.min(30_000));
+            hidden_exit_ms = Some(value.parse::<u64>()?.max(30_000));
         } else if let Some(value) = arg.strip_prefix("--initial-uri=") {
             initial.push(value.to_string());
         } else if arg == "--detached" {

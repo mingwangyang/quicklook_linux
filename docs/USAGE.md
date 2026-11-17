@@ -27,7 +27,7 @@
 ### deb 包（推荐，系统级）
 
 ~~~bash
-sudo apt install ./dist/quicklook_V0.0.16_amd64.deb
+sudo apt install ./dist/quicklook_V0.0.18_amd64.deb
 ~~~
 
 安装后 `quicklook` 在 `/usr/bin`，应用菜单里会出现「Quick Look」和「Quick Look 设置」。库依赖由系统包管理，deb 不会自带 GTK、mpv、Poppler 这些运行时。
@@ -160,7 +160,7 @@ quicklook --apply-hosts --dry-run   # 只列出会改哪些文件
 | `cache_mb` | `200` | 预览缓存上限 |
 | `image_max_edge` | `2560` | 图片解码最大边长 |
 | `idle_timeout_secs` | `600` | 常驻服务空闲退出时间 |
-| `viewer_grace_secs` | `3` | 预览进程关闭后保留秒数 |
+| `viewer_grace_secs` | `30` | 预览进程关闭后保留秒数（3–600；越大重开越快） |
 | `text_chunk_bytes` | `262144` | 文本首段大小 |
 | `max_text_buffer_bytes` | `8388608` | 文本上限 |
 | `max_archive_entries` | `10000` | 压缩包列出条目上限 |

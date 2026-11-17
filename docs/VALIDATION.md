@@ -872,3 +872,42 @@ let inflight = {
 - `org.xfce.FileManager.DisplayFolderAndSelect` 选中 `/tmp/ql99/thunar.png`，空格打开后 `quicklook --status` 为 `visible=true body=image`；`niri msg --json windows` 中预览窗口 `org.quicklook.Preview` 为 `is_focused=true`。
 - 不点击鼠标，直接第二次按空格：`visible=false`，预览关闭；再次打开后把焦点切回 Thunar 再按空格，也能经适配器关闭。
 - 139 项 Rust 测试、clippy 0 警告、fmt 干净。
+
+## 修「点击预览上边栏/下边栏后空格失效」（0.0.17）
+
+**现象**：预览窗口打开后，点击标题栏（上一页/下一页、固定、全屏、复制、属性、打开方式、打开）或底部格式栏/状态胶囊，再按空格没有任何反应；必须先点内容区才能恢复。
+
+**根因**：标题栏、格式栏和状态胶囊不属于 `content` 内容区。GTK 点击会把键盘焦点交给被点中的按钮；窗口级 `EventControllerKey` 在部分控件/焦点路径下收不到空格，`space_held` 没有置位，`connect_key_released` 自然不关闭预览。窗口级 `GestureClick` 也收不到 `GtkHeaderBar`（titlebar）的点击，因此必须在各区域分别挂手势。
+
+**修法**（`crates/daemon/src/ui/mod.rs`）：
+- `content.set_focusable(true)`；
+- 新增 `refocus_on_click(widget, content)`，为 `header`、`format_bar`、`status_pill` 各挂一个 Capture 阶段的 `GestureClick`；点击释放后通过 `glib::idle_add_local_once` 把焦点还给内容区，不打断按钮自身的点击处理。
+- 保留窗口级键盘捕获、`space_closes` 和 `EventControllerFocus` 的锁存清理。
+
+**验证**（Xephyr X11 + metacity + 私有 D-Bus，target/release/quicklook-viewer）：
+- 点击标题栏「固定」按钮（514,105）后 `Status.pinned=true`，再按空格 → `visible=false`；
+- 点击 PDF 格式栏「单页模式」按钮（435,720）后，再按空格 → `visible=false`，`pdf_continuous=true` 保持不变；
+- 点击底部状态胶囊（180,705）后，再按空格 → `visible=false`。
+- 139 项 Rust 测试、clippy 0 警告、fmt 干净。
+
+## 文件夹第二次唤起 / Markdown 渲染空格关闭 + 首次唤起预热（0.0.18）
+
+### 问题
+
+- 文件夹第一次预览关闭后，第二次唤起偶尔再次按空格关不掉；Markdown 正在渲染（WebView 尚未发出 `load-changed=Finished`）时按空格也可能关不掉。
+- 适配器的 `snoop` 原来每次按键都先同步调用 `quicklook_core::protocol::preview_visible()`（GIO D-Bus 调 broker `Status`，500ms 超时）。viewer 在渲染 Markdown/统计目录时可能超过这个时间，查询返回 false，空格就被当成「没有预览」忽略；同时每次按键都多一次同步 D-Bus，拖慢交互。
+
+### 修法
+
+- `crates/thunar-adapter/src/lib.rs` / `crates/caja-adapter/src/lib.rs`：正常路径不再查 broker；Thunar/Caja 活动时直接 `find_view` + `Toggle`。只在宿主不是活动窗口、或焦点不在文件视图（路径栏/搜索框）时，才查一次 `preview_visible()` 并 `close_preview()`。Nemo 的 `process_key` 同样只在找不到视图时查询。
+- `crates/daemon/src/ui/views.rs`：`web_view_with` 创建 WebView 后调用 `self.install_preview_keys(&view)`，并 `view.set_focusable(false)`；`crates/daemon/src/ui/mod.rs` 把原来的窗口按键控制器抽成 `install_preview_keys`，WebView 与窗口共用同一套 `key()`/`space_held` 状态机，Markdown 渲染中 press/release 都能到达。
+- 启动：`crates/cli/src/service.rs` 新增 `start_viewer_with_grace(Duration)` 与 `prewarm()`；`autostart` 用户在 broker 注册完名字 100ms 后异步预热 viewer，`--idle-exit-ms=3600000`。`crates/daemon/src/main.rs` 的 `--idle-exit-ms` 由 `.min(30_000)` 改为 `.max(30_000)`，否则预热参数会被压成 30 秒。`Config` 的 `viewer_grace_secs` 默认 30（范围 3–600）。
+
+### 验证
+
+- 真实 Thunar（Xephyr X11 + 私有 D-Bus + 目标构建）：点击文件行 → 空格，`visible=true`；不点击预览，再按空格，`visible=false`，适配器日志正常。
+- Markdown（含 Mermaid）`Show` 后在 `ready=false`、窗口刚可见时聚焦并按空格：`visible=false`，说明渲染中也能关闭。
+- 图片预览：点击标题栏或格式栏后按空格均 `visible=false`（Xephyr + xdotool，点击标题栏与格式栏各测一次）。
+- 预热：`quicklookd` 启动 1.2s 后 viewer 已存在（`--idle-exit-ms=3600000`）；`Show a.png` CLI 返回 `10.2ms`、`visible` 在 `154ms` 出现，`request_to_content_ms=49.9968`；35 秒后 viewer 仍在。
+- 安装版 0.0.18：清理旧 broker/viewer 后启动新 broker，预热 1 秒内完成；`quicklook --show /tmp/ql99/a.png` 的 CLI 返回 `14.1ms`、`visible` `23.3ms` 出现（同一轮实测），说明 deb 包内预热链路生效。
+- 139 项 Rust 测试、`clippy -D warnings`、`cargo fmt --check` 全部通过。

@@ -36,8 +36,34 @@ impl Service {
         )?)
     }
     fn start_viewer(&self) -> Result<()> {
+        let grace = self.config.borrow().viewer_grace_secs.max(3);
+        self.start_viewer_with_grace(Duration::from_secs(grace))
+    }
+    /// 用指定的隐藏生命周期启动 viewer。启动预热时用较长的值，
+    /// 让首次真正 Show 不再承担进程启动与 GTK/WebKit 初始化成本。
+    fn start_viewer_with_grace(&self, grace: Duration) -> Result<()> {
         if self.viewer("Status", None).is_ok() {
             return Ok(());
+        }
+        // 预热和用户第一次 Show 可能同时到达。broker 是单线程的，但
+        // `start_viewer_with_grace` 里会 sleep 轮询；如果已经有了一个
+        // 正在启动的子进程，等它注册总线名，不能重复 spawn 第二个 viewer，
+        // 否则两个进程抢 `org.quicklook.Viewer`，用户看到的是超时或闪退。
+        let already_starting = {
+            let mut slot = self.child.borrow_mut();
+            if let Some(child) = slot.as_mut() {
+                if child.try_wait()?.is_none() {
+                    true
+                } else {
+                    slot.take();
+                    false
+                }
+            } else {
+                false
+            }
+        };
+        if already_starting {
+            return self.wait_for_viewer(Duration::from_secs(5));
         }
         let path = std::env::current_exe()?
             .parent()
@@ -50,10 +76,7 @@ impl Service {
             .open(cache_dir().join("viewer.log"))?;
         let mut command = Command::new(&path);
         command
-            .arg(format!(
-                "--idle-exit-ms={}",
-                self.config.borrow().viewer_grace_secs * 1000
-            ))
+            .arg(format!("--idle-exit-ms={}", grace.as_millis()))
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::from(log));
@@ -62,10 +85,14 @@ impl Service {
             .spawn()
             .with_context(|| format!("无法启动 {}", path.display()))?;
         if let Some(mut previous) = self.child.borrow_mut().replace(child) {
-            let _ = previous.try_wait();
+            let _ = previous.kill();
+            let _ = previous.wait();
         }
+        self.wait_for_viewer(Duration::from_secs(5))
+    }
+    fn wait_for_viewer(&self, timeout: Duration) -> Result<()> {
         let start = Instant::now();
-        while start.elapsed() < Duration::from_secs(5) {
+        while start.elapsed() < timeout {
             if self.viewer("Status", None).is_ok() {
                 return Ok(());
             }
@@ -77,6 +104,17 @@ impl Service {
             std::thread::sleep(Duration::from_millis(10));
         }
         bail!("预览进程启动超时")
+    }
+    /// 登录自启动的 broker 在名字注册完成后预热一个 viewer。
+    ///
+    /// 预览窗本身只有 6MB 左右；把进程和 GTK/WebKit 初始化提前到登录后，
+    /// 用户第一次按空格时只剩一次 IPC + 渲染，而不是 1–3 秒的冷启动。
+    /// 只对 autostart 用户执行，保持「装上不偷偷常驻」的默认行为。
+    fn prewarm(&self) {
+        if !self.config.borrow().autostart {
+            return;
+        }
+        let _ = self.start_viewer_with_grace(Duration::from_secs(3600));
     }
     fn update_nemo(&self, force: bool) -> Result<()> {
         let config = self.config.borrow();
@@ -409,6 +447,16 @@ fn run() -> Result<()> {
         glib::ControlFlow::Continue
     });
     eprintln!("quicklookd ready; lightweight GIO broker");
+    // 名字、托盘和 Nemo 接口都已注册后再预热，避免 viewer 抢先连接时
+    // 找不到 Viewer 总线名；用 idle 让主循环先跑起来。
+    if state.config.borrow().autostart {
+        let weak = Rc::downgrade(&state);
+        glib::timeout_add_local_once(Duration::from_millis(100), move || {
+            if let Some(state) = weak.upgrade() {
+                state.prewarm();
+            }
+        });
+    }
     loop_.run();
     let _ = state.viewer("Quit", None);
     connection.flush_sync(None::<&gio::Cancellable>)?;

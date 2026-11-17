@@ -466,21 +466,21 @@ extern "C" fn snoop(widget: *mut c_void, event: *mut c_void, _data: *mut c_void)
     if unsafe { (api.event_state)(event, &mut state) } == 0 && kind == KEY_PRESS {
         return 0;
     }
-    // 同 Thunar：预览可见时空格优先关闭，不依赖焦点是否落在文件视图。
-    if kind == KEY_PRESS
-        && keyval == wanted.keyval()
-        && state & MODIFIER_MASK == wanted.x11_modifiers()
-        && !PRESSED.with(|latch| latch.rapid())
-        && quicklook_core::protocol::preview_visible()
-    {
-        PRESSED.with(HoldLatch::release);
-        let _ = quicklook_core::protocol::close_preview();
-        return 1;
-    }
-    // 预览已显示时上面的分支负责关闭；只有准备打开预览（或没有预览）时，
-    // 才要求 Caja 自身处于活动状态，避免预览已获得焦点后宿主重复触发开关。
     let top = unsafe { (api.widget_get_toplevel)(widget) };
-    if top.is_null() || unsafe { (api.window_is_active)(top) } == 0 {
+    let active = !top.is_null() && unsafe { (api.window_is_active)(top) } != 0;
+    // 同 Thunar：只有 Caja 不是活动窗口时才问 broker；正常打开/关闭路径
+    // 直接走 toggle，避免 Status 调用阻塞按键。
+    if !active {
+        if kind == KEY_PRESS
+            && keyval == wanted.keyval()
+            && state & MODIFIER_MASK == wanted.x11_modifiers()
+            && !PRESSED.with(|latch| latch.rapid())
+            && quicklook_core::protocol::preview_visible()
+        {
+            PRESSED.with(HoldLatch::release);
+            let _ = quicklook_core::protocol::close_preview();
+            return 1;
+        }
         return 0;
     }
     let pressed = PRESSED.with(|latch| latch.pressed());
@@ -510,7 +510,18 @@ extern "C" fn snoop(widget: *mut c_void, event: *mut c_void, _data: *mut c_void)
         KeyAction::Activate => {}
     }
     let Some(view) = find_view(api, widget) else {
-        // 焦点在地址栏、搜索框这类不属于视图的控件上：交回 Caja，别吞掉按键。
+        // 焦点在地址栏、搜索框这类不属于视图的控件上：如果预览正开着，
+        // 空格仍应关闭它；平时正常在文件视图里不会查 broker。
+        if kind == KEY_PRESS
+            && keyval == wanted.keyval()
+            && state & MODIFIER_MASK == wanted.x11_modifiers()
+            && !PRESSED.with(|latch| latch.rapid())
+            && quicklook_core::protocol::preview_visible()
+        {
+            PRESSED.with(HoldLatch::release);
+            let _ = quicklook_core::protocol::close_preview();
+            return 1;
+        }
         if debug_on() {
             log("没有找到文件视图，交回宿主");
         }
