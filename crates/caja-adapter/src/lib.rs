@@ -466,23 +466,22 @@ extern "C" fn snoop(widget: *mut c_void, event: *mut c_void, _data: *mut c_void)
     if unsafe { (api.event_state)(event, &mut state) } == 0 && kind == KEY_PRESS {
         return 0;
     }
-    // The preview window owns the keyboard once it is focused; if Caja also sees
-    // the same keys, toggling again would close and immediately reopen another
-    // file. Only act while Caja itself is active.
-    let top = unsafe { (api.widget_get_toplevel)(widget) };
-    if top.is_null() || unsafe { (api.window_is_active)(top) } == 0 {
-        return 0;
-    }
     // 同 Thunar：预览可见时空格优先关闭，不依赖焦点是否落在文件视图。
     if kind == KEY_PRESS
         && keyval == wanted.keyval()
         && state & MODIFIER_MASK == wanted.x11_modifiers()
-        && !PRESSED.with(|latch| latch.pressed())
+        && !PRESSED.with(|latch| latch.rapid())
         && quicklook_core::protocol::preview_visible()
     {
         PRESSED.with(HoldLatch::release);
         let _ = quicklook_core::protocol::close_preview();
         return 1;
+    }
+    // 预览已显示时上面的分支负责关闭；只有准备打开预览（或没有预览）时，
+    // 才要求 Caja 自身处于活动状态，避免预览已获得焦点后宿主重复触发开关。
+    let top = unsafe { (api.widget_get_toplevel)(widget) };
+    if top.is_null() || unsafe { (api.window_is_active)(top) } == 0 {
+        return 0;
     }
     let pressed = PRESSED.with(|latch| latch.pressed());
     let rapid = PRESSED.with(|latch| latch.rapid());

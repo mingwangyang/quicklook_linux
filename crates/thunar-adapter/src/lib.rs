@@ -570,13 +570,6 @@ extern "C" fn snoop(widget: *mut c_void, event: *mut c_void, _data: *mut c_void)
     if unsafe { (api.gdk_event_get_state)(event, &mut state) } == 0 && kind == KEY_PRESS {
         return 0;
     }
-    // 只处理 Thunar 自己处于活动状态时的按键。预览窗口获得焦点后，按键应该由
-    // 预览窗口自己处理；如果 Thunar 仍收到同一串按键（某些合成器会同时投递），
-    // 这里再执行一次「关闭 + 打开」会把预览换成下一个文件，看起来像没关掉。
-    let top = unsafe { (api.gtk_widget_get_toplevel)(widget) };
-    if top.is_null() || unsafe { (api.gtk_window_is_active)(top) } == 0 {
-        return 0;
-    }
     // 预览已经开着时，空格的首要语义是关闭。这里直接问 broker，而不是依赖
     // 锁存和焦点：焦点可能停在路径栏、搜索框或工具栏，find_view 找不到文件
     // 视图；锁存也可能因为预览抢焦点而收不到抬起事件。两种情况都会让空格
@@ -584,12 +577,18 @@ extern "C" fn snoop(widget: *mut c_void, event: *mut c_void, _data: *mut c_void)
     if kind == KEY_PRESS
         && keyval == wanted.keyval()
         && state & MODIFIER_MASK == wanted.x11_modifiers()
-        && !PRESSED.with(|latch| latch.pressed())
+        && !PRESSED.with(|latch| latch.rapid())
         && quicklook_core::protocol::preview_visible()
     {
         PRESSED.with(HoldLatch::release);
         let _ = quicklook_core::protocol::close_preview();
         return 1;
+    }
+    // 预览已显示时上面的分支负责关闭；只有准备打开预览（或没有预览）时，
+    // 才要求 Thunar 自身处于活动状态，避免预览已获得焦点后宿主重复触发开关。
+    let top = unsafe { (api.gtk_widget_get_toplevel)(widget) };
+    if top.is_null() || unsafe { (api.gtk_window_is_active)(top) } == 0 {
+        return 0;
     }
     let pressed = PRESSED.with(|latch| latch.pressed());
     let rapid = PRESSED.with(|latch| latch.rapid());

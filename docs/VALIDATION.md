@@ -856,3 +856,19 @@ let inflight = {
 - `show()` 多文件分支、`render()` 首帧、`error()` 全部改走 `present_preview()`。
 
 **验证**：私有 D-Bus 会话启动 `target/release/quicklook-viewer`，`Show` 图片后 `niri msg --json focused-window` 为 `thunar.png — Quick Look` / `org.quicklook.Preview` / `is_focused: true`；139 项测试、clippy 0 警告、fmt 干净。
+
+## 修「空格唤起后必须鼠标点一下才能关闭」的残留锁存（0.0.16）
+
+**现象**：0.0.15 已让预览窗口获得键盘焦点，但用户仍反馈「空格唤起后，非要鼠标点一下，才能空格关闭」，且不只 PDF。
+
+**根因**：Thunar/Caja 适配器的 `HoldLatch` 在空格按下时置位；预览窗口打开后 key-up 可能投递给预览窗口，宿主收不到抬起事件，锁存一直保持「按下」。适配器里「预览已可见就关闭」的分支原先要求 `!PRESSED.pressed()`，于是第二次空格被当作自动重复吞掉。鼠标点击预览窗口会触发 Thunar 的 focus-out，适配器的 `reset_held` 清掉锁存，所以点一下之后又能关闭。
+
+**修法**：
+- `crates/thunar-adapter/src/lib.rs`、`crates/caja-adapter/src/lib.rs` 的关闭分支改用 `!PRESSED.with(|latch| latch.rapid())`，只过滤 80ms 内的自动重复，不再要求锁存已经释放。
+- 把 `gtk_window_is_active` 的宿主活动检查移到关闭分支之后：预览已经显示时优先关闭；只有准备打开预览时才要求宿主窗口处于活动状态。
+- 0.0.15 的 `present_preview()` / `focus_preview()` 继续保留，确保首次呈现时预览窗口拿到键盘焦点。
+
+**验证**（Wayland/niri，私有 D-Bus + target Thunar）：
+- `org.xfce.FileManager.DisplayFolderAndSelect` 选中 `/tmp/ql99/thunar.png`，空格打开后 `quicklook --status` 为 `visible=true body=image`；`niri msg --json windows` 中预览窗口 `org.quicklook.Preview` 为 `is_focused=true`。
+- 不点击鼠标，直接第二次按空格：`visible=false`，预览关闭；再次打开后把焦点切回 Thunar 再按空格，也能经适配器关闭。
+- 139 项 Rust 测试、clippy 0 警告、fmt 干净。
