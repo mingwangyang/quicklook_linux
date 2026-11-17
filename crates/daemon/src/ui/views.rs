@@ -7,13 +7,14 @@ impl Controller {
     pub(super) fn render(self: &Rc<Self>, prepared: Arc<Prepared>) {
         clear(&self.content);
         clear(&self.format_bar);
+        self.apply_background(&prepared.info);
         {
             let mut state = self.state.borrow_mut();
             state.active = Active::default();
             state.prepared = Some(prepared.clone());
         }
         match &prepared.body {
-            Body::Image(image) => self.image_view(image),
+            Body::Image(image) => self.image_view(&prepared.info, image),
             Body::Tile { .. } => {}
             Body::Pdf(pdf) => {
                 self.pdf_view(&prepared.info, pdf);
@@ -221,7 +222,15 @@ impl Controller {
             }
             Body::Summary(text) => self.content.append(&gtk4::Label::new(Some(text))),
             Body::Media => {
-                match MediaView::new(&prepared.info.uri, prepared.info.mime.starts_with("audio/")) {
+                let background = self
+                    .background_color(&prepared.info)
+                    .map(|color| color_text(&color))
+                    .unwrap_or_else(|| "#000000".to_string());
+                match MediaView::new(
+                    &prepared.info.uri,
+                    prepared.info.mime.starts_with("audio/"),
+                    &background,
+                ) {
                     Ok(media) => {
                         self.content.append(&media.root);
                         self.state.borrow_mut().active.media = Some(media);
@@ -261,10 +270,14 @@ impl Controller {
         self.status.set_text(&hint);
         self.format_bar
             .set_visible(self.format_bar.first_child().is_some());
+        if !self.window.is_visible() {
+            self.window.present();
+        }
         self.window.queue_resize();
     }
-    fn image_view(self: &Rc<Self>, image: &ImageData) {
+    fn image_view(self: &Rc<Self>, file: &FileInfo, image: &ImageData) {
         let canvas = Canvas::new();
+        canvas.set_background(self.background_color(file));
         canvas.set_pixels(&image.frames[0].0);
         if let Some(size) = image.source_size {
             canvas.set_source_size(size);
@@ -274,7 +287,7 @@ impl Controller {
             let controller = Rc::downgrade(self);
             let mut previous = None;
             let mut submitted = None;
-            glib::timeout_add_local(Duration::from_millis(80), move || {
+            glib::timeout_add_local(Duration::from_millis(300), move || {
                 let (Some(canvas), Some(c)) = (weak.upgrade(), controller.upgrade()) else {
                     return glib::ControlFlow::Break;
                 };
@@ -414,7 +427,12 @@ impl Controller {
     }
     fn pdf_view(self: &Rc<Self>, file: &FileInfo, pdf: &PdfData) {
         let canvas = Canvas::new();
+        canvas.set_background(self.background_color(file));
         canvas.set_pdf(pdf);
+        // 让窗口贴合页面比例，页面本身占满内容区（此前 PDF 窗口是 1120x756 的横窗，页面竖排两侧全是空白）。
+        if pdf.pixels.width > 0 && pdf.pixels.height > 0 {
+            self.size_window(Some(pdf.pixels.width as f64 / pdf.pixels.height as f64));
+        }
         let paned = gtk4::Paned::new(gtk4::Orientation::Horizontal);
         paned.set_hexpand(true);
         paned.set_vexpand(true);
@@ -506,6 +524,8 @@ impl Controller {
         hint.set_widget_name("pdf-hint");
         hint.set_hexpand(true);
         hint.set_xalign(1.);
+        hint.set_ellipsize(gtk4::pango::EllipsizeMode::End);
+        hint.set_max_width_chars(26);
         self.format_bar.append(&hint);
         self.canvas_controls(&canvas);
         // 让键盘一开始就落到画布上：窗口首个可聚焦控件是页码 SpinButton，
@@ -566,7 +586,7 @@ impl Controller {
                 s.pdf_zoom
             };
             canvas.set_zoom(zoom);
-            canvas.set_size_request(-1, (640. * aspect * zoom).clamp(120., 6000.) as i32);
+            canvas.set_size_request(-1, c.pdf_page_height(aspect, zoom));
             item.set_child(Some(&canvas));
             c.submit(
                 Task::Prepare(
@@ -622,12 +642,20 @@ impl Controller {
             if widget.widget_name() == "pdf-hint"
                 && let Some(label) = widget.downcast_ref::<gtk4::Label>()
             {
-                label.set_text("连续滚动 · Ctrl+滚轮或 +/- 缩放全部页面 · Page Up/Down 翻页");
+                label.set_text("连续滚动 · Ctrl+滚轮缩放");
             }
             control = widget.next_sibling();
         }
         self.status
             .set_text("连续滚动 · Ctrl+滚轮或 +/- 缩放全部页面 · Page Up/Down 翻页");
+        // 首次打开时窗口还没完成分配，工厂里的高度只能拿到 0；
+        // 等一帧后再按真实内容区高度重算每页高度。
+        let weak = Rc::downgrade(self);
+        glib::timeout_add_local_once(Duration::from_millis(300), move || {
+            if let Some(c) = weak.upgrade() {
+                c.resize_pdf_pages();
+            }
+        });
     }
     pub(super) fn toggle_pdf_continuous(self: &Rc<Self>, user: bool) {
         let (prepared, continuous, page) = {
@@ -936,6 +964,9 @@ impl Controller {
             )
         };
         let _ = manager;
+        if let Some(color) = self.background_color(file) {
+            view.set_background_color(&color);
+        }
         if let Some(settings) = webkit6::prelude::WebViewExt::settings(&view) {
             settings.set_enable_javascript(diagrams);
             settings.set_enable_html5_database(false);

@@ -39,6 +39,7 @@ struct Api {
     gtk_key_snooper_install: unsafe extern "C" fn(Snoop, *mut c_void) -> u32,
     gtk_widget_get_parent: unsafe extern "C" fn(*mut c_void) -> *mut c_void,
     gtk_window_get_focus: unsafe extern "C" fn(*mut c_void) -> *mut c_void,
+    gtk_window_is_active: unsafe extern "C" fn(*mut c_void) -> c_int,
     gtk_window_get_type: unsafe extern "C" fn() -> usize,
     gtk_editable_get_type: unsafe extern "C" fn() -> usize,
     gtk_text_view_get_type: unsafe extern "C" fn() -> usize,
@@ -128,6 +129,7 @@ impl Api {
             gtk_widget_get_parent: required!(gtk, "gtk_widget_get_parent", _),
             gtk_widget_get_toplevel: required!(gtk, "gtk_widget_get_toplevel", _),
             gtk_window_get_focus: required!(gtk, "gtk_window_get_focus", _),
+            gtk_window_is_active: required!(gtk, "gtk_window_is_active", _),
             gtk_window_get_type: required!(gtk, "gtk_window_get_type", _),
             gtk_editable_get_type: required!(gtk, "gtk_editable_get_type", _),
             gtk_text_view_get_type: required!(gtk, "gtk_text_view_get_type", _),
@@ -567,6 +569,27 @@ extern "C" fn snoop(widget: *mut c_void, event: *mut c_void, _data: *mut c_void)
     let mut state = 0u32;
     if unsafe { (api.gdk_event_get_state)(event, &mut state) } == 0 && kind == KEY_PRESS {
         return 0;
+    }
+    // 只处理 Thunar 自己处于活动状态时的按键。预览窗口获得焦点后，按键应该由
+    // 预览窗口自己处理；如果 Thunar 仍收到同一串按键（某些合成器会同时投递），
+    // 这里再执行一次「关闭 + 打开」会把预览换成下一个文件，看起来像没关掉。
+    let top = unsafe { (api.gtk_widget_get_toplevel)(widget) };
+    if top.is_null() || unsafe { (api.gtk_window_is_active)(top) } == 0 {
+        return 0;
+    }
+    // 预览已经开着时，空格的首要语义是关闭。这里直接问 broker，而不是依赖
+    // 锁存和焦点：焦点可能停在路径栏、搜索框或工具栏，find_view 找不到文件
+    // 视图；锁存也可能因为预览抢焦点而收不到抬起事件。两种情况都会让空格
+    // 看起来「关不掉」。确认可见就先关掉，再走后续打开逻辑。
+    if kind == KEY_PRESS
+        && keyval == wanted.keyval()
+        && state & MODIFIER_MASK == wanted.x11_modifiers()
+        && !PRESSED.with(|latch| latch.pressed())
+        && quicklook_core::protocol::preview_visible()
+    {
+        PRESSED.with(HoldLatch::release);
+        let _ = quicklook_core::protocol::close_preview();
+        return 1;
     }
     let pressed = PRESSED.with(|latch| latch.pressed());
     let rapid = PRESSED.with(|latch| latch.rapid());

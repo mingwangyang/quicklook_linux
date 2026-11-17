@@ -15,7 +15,7 @@
 use anyhow::{Context, Result};
 use glib::variant::ToVariant;
 use libloading::Library;
-use quicklook_core::keys::{HoldLatch, KeyAction, PreviewKey, classify};
+use quicklook_core::keys::{HoldLatch, KeyAction, MODIFIER_MASK, PreviewKey, classify};
 use std::cell::Cell;
 use std::ffi::{CStr, c_char, c_int, c_void};
 use std::path::PathBuf;
@@ -54,6 +54,7 @@ struct Api {
     editable_get_type: GetType,
     text_view_get_type: GetType,
     window_get_focus: unsafe extern "C" fn(*mut c_void) -> *mut c_void,
+    window_is_active: unsafe extern "C" fn(*mut c_void) -> c_int,
     g_type_is_a: unsafe extern "C" fn(usize, usize) -> c_int,
     g_type_name: unsafe extern "C" fn(usize) -> *const c_char,
     g_free: unsafe extern "C" fn(*mut c_void),
@@ -125,6 +126,7 @@ impl Api {
             editable_get_type: required!(gtk, "gtk_editable_get_type", _),
             text_view_get_type: required!(gtk, "gtk_text_view_get_type", _),
             window_get_focus: required!(gtk, "gtk_window_get_focus", _),
+            window_is_active: required!(gtk, "gtk_window_is_active", _),
             g_type_is_a: required!(gobject, "g_type_is_a", _),
             g_type_name: required!(gobject, "g_type_name", _),
             g_free: required!(glib, "g_free", _),
@@ -463,6 +465,24 @@ extern "C" fn snoop(widget: *mut c_void, event: *mut c_void, _data: *mut c_void)
     let mut state = 0u32;
     if unsafe { (api.event_state)(event, &mut state) } == 0 && kind == KEY_PRESS {
         return 0;
+    }
+    // The preview window owns the keyboard once it is focused; if Caja also sees
+    // the same keys, toggling again would close and immediately reopen another
+    // file. Only act while Caja itself is active.
+    let top = unsafe { (api.widget_get_toplevel)(widget) };
+    if top.is_null() || unsafe { (api.window_is_active)(top) } == 0 {
+        return 0;
+    }
+    // 同 Thunar：预览可见时空格优先关闭，不依赖焦点是否落在文件视图。
+    if kind == KEY_PRESS
+        && keyval == wanted.keyval()
+        && state & MODIFIER_MASK == wanted.x11_modifiers()
+        && !PRESSED.with(|latch| latch.pressed())
+        && quicklook_core::protocol::preview_visible()
+    {
+        PRESSED.with(HoldLatch::release);
+        let _ = quicklook_core::protocol::close_preview();
+        return 1;
     }
     let pressed = PRESSED.with(|latch| latch.pressed());
     let rapid = PRESSED.with(|latch| latch.rapid());

@@ -28,3 +28,50 @@ pub const NEMO_XML: &str = r#"<node><interface name="org.nemo.Preview">
 <method name="ShowFile"><arg type="s" direction="in"/><arg type="i" direction="in"/><arg type="b" direction="in"/></method>
 <method name="Close"/>
 </interface></node>"#;
+
+/// 读取常驻 broker 里的预览可见状态。宿主适配器在按键旁路器里用它判断
+/// 「这次空格是打开还是关闭」——焦点不在文件视图时也能可靠关闭。
+pub fn preview_visible() -> bool {
+    let Ok(connection) = gio::bus_get_sync(gio::BusType::Session, None::<&gio::Cancellable>) else {
+        return false;
+    };
+    let Ok(reply) = connection.call_sync(
+        Some(BUS),
+        PATH,
+        BUS,
+        "Status",
+        None,
+        None,
+        gio::DBusCallFlags::NONE,
+        500,
+        None::<&gio::Cancellable>,
+    ) else {
+        return false;
+    };
+    reply
+        .get::<(String,)>()
+        .and_then(|(json,)| serde_json::from_str::<serde_json::Value>(&json).ok())
+        .and_then(|value| value["visible"].as_bool())
+        .unwrap_or(false)
+}
+
+/// 请求 broker 关闭当前预览。用于宿主已经确认预览可见、但焦点不在文件视图
+/// （例如停在路径栏/搜索框）时的空格关闭。
+pub fn close_preview() -> bool {
+    let Ok(connection) = gio::bus_get_sync(gio::BusType::Session, None::<&gio::Cancellable>) else {
+        return false;
+    };
+    connection
+        .call_sync(
+            Some(BUS),
+            PATH,
+            BUS,
+            "Close",
+            None,
+            None,
+            gio::DBusCallFlags::NONE,
+            500,
+            None::<&gio::Cancellable>,
+        )
+        .is_ok()
+}

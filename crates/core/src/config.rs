@@ -33,6 +33,22 @@ pub struct Config {
     pub window_width: u32,
     /// 预览窗口默认高度（逻辑像素）。0 表示按内容自动。
     pub window_height: u32,
+    /// PDF 预览内容区背景色（#RRGGBB）。默认向常见 PDF 阅读器的深灰看齐。
+    pub background_pdf: String,
+    /// 图片预览内容区背景色（#RRGGBB）。默认向常见图片查看器的深灰看齐。
+    pub background_image: String,
+    /// 视频预览内容区背景色（#RRGGBB）。默认向 mpv / VLC 的纯黑看齐。
+    pub background_video: String,
+    /// 音频预览内容区背景色（#RRGGBB）。默认向 Audacity 的深灰看齐。
+    pub background_audio: String,
+    /// Word / PPT 等文档预览内容区背景色（#RRGGBB）。默认向 LibreOffice 的桌面灰看齐。
+    pub background_office: String,
+    /// Excel / CSV 等表格预览内容区背景色（#RRGGBB）。默认向 Calc 的单元格白看齐。
+    pub background_sheet: String,
+    /// 文本 / 代码 / Markdown / HTML 预览内容区背景色（#RRGGBB）。空表示跟随主题。
+    pub background_text: String,
+    /// 其它类型（目录、压缩包、字体等）的背景色（#RRGGBB）。空表示跟随主题。
+    pub background_other: String,
     /// PDF 是否默认进入连续滚动模式。
     pub pdf_continuous: bool,
     /// 是否接管宿主自带的预览入口与同键原有行为。
@@ -69,6 +85,14 @@ impl Default for Config {
             window_mode: "floating".into(),
             window_width: 940,
             window_height: 650,
+            background_pdf: "#333333".into(),
+            background_image: "#1f1f1f".into(),
+            background_video: "#000000".into(),
+            background_audio: "#1e1e1e".into(),
+            background_office: "#e6e6e6".into(),
+            background_sheet: "#ffffff".into(),
+            background_text: String::new(),
+            background_other: String::new(),
             pdf_continuous: true,
             hijack_native: false,
             // 默认不开：装完不会悄悄往 autostart 里塞条目，用户要么在设置里打开，
@@ -113,6 +137,19 @@ pub fn cache_dir() -> PathBuf {
 }
 pub fn config_path() -> PathBuf {
     config_dir().join("config.toml")
+}
+/// 校验 `#RRGGBB`；非法值返回空字符串（交给使用方用默认色）。
+fn normalize_color(value: &str) -> String {
+    let text = value.trim();
+    let bytes = text.as_bytes();
+    if bytes.len() == 7
+        && bytes[0] == b'#'
+        && bytes[1..].iter().all(|byte| byte.is_ascii_hexdigit())
+    {
+        text.to_ascii_lowercase()
+    } else {
+        String::new()
+    }
 }
 impl Config {
     pub fn load() -> anyhow::Result<Self> {
@@ -173,7 +210,7 @@ impl Config {
     pub fn uses_dark_theme(&self) -> bool {
         self.theme.eq_ignore_ascii_case("dark")
     }
-    /// 用户设置的窗口默认尺寸；两个都为 0 时返回 None，表示按内容自动。
+    /// 用户设置的窗口默认尺寸；两个都为 0 时返回 None，表示按屏幕自动。
     pub fn window_size(&self) -> Option<(i32, i32)> {
         (self.window_width != 0 && self.window_height != 0)
             .then_some((self.window_width as i32, self.window_height as i32))
@@ -205,6 +242,18 @@ impl Config {
         }
         if self.window_height != 0 {
             self.window_height = self.window_height.clamp(320, 4320);
+        }
+        for color in [
+            &mut self.background_pdf,
+            &mut self.background_image,
+            &mut self.background_video,
+            &mut self.background_audio,
+            &mut self.background_office,
+            &mut self.background_sheet,
+            &mut self.background_text,
+            &mut self.background_other,
+        ] {
+            *color = normalize_color(color);
         }
         self.text_chunk_bytes = self.text_chunk_bytes.clamp(4096, 1024 * 1024);
         self.max_text_buffer_bytes = self
@@ -240,10 +289,21 @@ mod tests {
         let config = Config::default();
         assert_eq!(config.window_size(), Some((940, 650)));
         assert!(config.pdf_continuous);
+        let mut fixed = config.clone();
+        fixed.window_width = 1120;
+        fixed.window_height = 790;
+        assert_eq!(fixed.window_size(), Some((1120, 790)));
         let mut auto = config.clone();
         auto.window_width = 0;
         auto.window_height = 0;
         assert_eq!(auto.window_size(), None);
+        assert_eq!(config.background_pdf, "#333333");
+        assert_eq!(config.background_image, "#1f1f1f");
+        assert_eq!(config.background_video, "#000000");
+        assert_eq!(config.background_audio, "#1e1e1e");
+        assert_eq!(config.background_office, "#e6e6e6");
+        assert_eq!(config.background_sheet, "#ffffff");
+        assert!(config.background_text.is_empty());
     }
 
     #[test]

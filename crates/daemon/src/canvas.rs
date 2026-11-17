@@ -18,6 +18,7 @@ mod imp {
         pub source_size: Cell<Option<[u32; 2]>>,
         pub detail: RefCell<Option<(gdk::Texture, [u32; 4])>>,
         pub requested: Cell<Option<[u32; 4]>>,
+        pub background: RefCell<Option<gdk::RGBA>>,
     }
     #[glib::object_subclass]
     impl ObjectSubclass for Canvas {
@@ -44,10 +45,9 @@ mod imp {
             let width = obj.width() as f32;
             let height = obj.height() as f32;
             snapshot.push_clip(&graphene::Rect::new(0., 0., width, height));
-            snapshot.append_color(
-                &gdk::RGBA::new(0.055, 0.063, 0.078, 1.),
-                &graphene::Rect::new(0., 0., width, height),
-            );
+            let background = (*self.background.borrow())
+                .unwrap_or_else(|| gdk::RGBA::new(0.055, 0.063, 0.078, 1.));
+            snapshot.append_color(&background, &graphene::Rect::new(0., 0., width, height));
             if let Some(texture) = self.texture.borrow().as_ref() {
                 let (w, h) = obj.image_size();
                 let (w, h) = (w as f32, h as f32);
@@ -226,6 +226,11 @@ impl Canvas {
         });
         obj.add_controller(key);
         obj
+    }
+    /// 内容区底色；`None` 用内置的深色（图片查看器的默认观感）。
+    pub fn set_background(&self, color: Option<gdk::RGBA>) {
+        self.imp().background.replace(color);
+        self.queue_draw();
     }
     pub fn set_pixels(&self, pixels: &Pixels) {
         let bytes = glib::Bytes::from_owned(pixels.bytes.clone());

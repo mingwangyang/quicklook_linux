@@ -76,9 +76,10 @@ struct Core {
     render: *mut c_void,
     dirty: Box<AtomicBool>,
     error: String,
+    background: String,
 }
 impl Core {
-    fn new() -> Result<Self> {
+    fn new(background: &str) -> Result<Self> {
         unsafe {
             let handle = mpv_create();
             ensure!(!handle.is_null(), "无法创建 libmpv");
@@ -87,6 +88,7 @@ impl Core {
                 render: ptr::null_mut(),
                 dirty: Box::new(AtomicBool::new(true)),
                 error: String::new(),
+                background: background.to_owned(),
             };
             for (name, value) in [
                 ("config", "no"),
@@ -240,8 +242,8 @@ pub struct MediaView {
     core: Rc<RefCell<Core>>,
 }
 impl MediaView {
-    pub fn new(uri: &str, audio: bool) -> Result<Self> {
-        let core = Rc::new(RefCell::new(Core::new()?));
+    pub fn new(uri: &str, audio: bool, background: &str) -> Result<Self> {
+        let core = Rc::new(RefCell::new(Core::new(background)?));
         let root = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
         let area = gtk4::GLArea::builder()
             .hexpand(true)
@@ -256,6 +258,7 @@ impl MediaView {
         error_label.set_visible(false);
         let core2 = core.clone();
         let uri = uri.to_owned();
+        let background = background.to_owned();
         let errors = error_label.downgrade();
         area.connect_realize(move |area| {
             area.make_current();
@@ -266,11 +269,15 @@ impl MediaView {
             };
             match result {
                 Ok(()) => {
+                    core2
+                        .borrow()
+                        .command(&["set", "background-color", &background]);
                     core2.borrow().command(&["loadfile", &uri, "replace"]);
                     if audio {
-                        core2
-                            .borrow()
-                            .command(&["set", "lavfi-complex", visualizer(1)]);
+                        // 音频可视化按窗口拉伸铺满，否则 1024x320 的波形会在上下留下黑边。
+                        core2.borrow().command(&["set", "keepaspect", "no"]);
+                        let graph = visualizer(1, &background);
+                        core2.borrow().command(&["set", "lavfi-complex", &graph]);
                     }
                 }
                 Err(error) => {
@@ -389,14 +396,28 @@ impl MediaView {
             glib::Propagation::Proceed
         });
         controls.append(&volume);
-        let speed = gtk4::DropDown::from_strings(&["0.5×", "0.75×", "1×", "1.25×", "1.5×", "2×"]);
-        speed.set_selected(2);
+        // 用循环按钮而不是 GtkDropDown：下拉菜单会弹出独立的 GtkPopover 表面，
+        // 空格键会被菜单吃掉，预览窗口收不到，表现成「空格关不掉」。按钮没有
+        // 独立表面，窗口的按键捕获始终有效。
+        const SPEEDS: [(&str, &str); 6] = [
+            ("0.5", "0.5×"),
+            ("0.75", "0.75×"),
+            ("1", "1×"),
+            ("1.25", "1.25×"),
+            ("1.5", "1.5×"),
+            ("2", "2×"),
+        ];
+        let speed_index = Rc::new(Cell::new(2usize));
+        let speed = gtk4::Button::with_label(SPEEDS[2].1);
+        speed.set_tooltip_text(Some("播放速度"));
         let core2 = core.clone();
-        speed.connect_selected_notify(move |combo| {
-            let values = ["0.5", "0.75", "1", "1.25", "1.5", "2"];
-            if let Some(value) = values.get(combo.selected() as usize) {
-                core2.borrow().command(&["set", "speed", value]);
-            }
+        let speed_index2 = speed_index.clone();
+        let speed_button = speed.clone();
+        speed.connect_clicked(move |_| {
+            let next = (speed_index2.get() + 1) % SPEEDS.len();
+            speed_index2.set(next);
+            speed_button.set_label(SPEEDS[next].1);
+            core2.borrow().command(&["set", "speed", SPEEDS[next].0]);
         });
         controls.append(&speed);
         let repeat = gtk4::ToggleButton::builder()
@@ -413,13 +434,22 @@ impl MediaView {
         });
         controls.append(&repeat);
         if audio {
-            let visualization = gtk4::DropDown::from_strings(&["封面 / 音轨", "波形", "频谱"]);
-            visualization.set_selected(1);
+            const MODES: [&str; 3] = ["封面 / 音轨", "波形", "频谱"];
+            let mode_index = Rc::new(Cell::new(1usize));
+            let visualization = gtk4::Button::with_label(MODES[1]);
+            visualization.set_tooltip_text(Some("音频可视化"));
             let core2 = core.clone();
-            visualization.connect_selected_notify(move |v| {
-                core2
-                    .borrow()
-                    .command(&["set", "lavfi-complex", visualizer(v.selected())])
+            let mode_index2 = mode_index.clone();
+            let visualization_button = visualization.clone();
+            visualization.connect_clicked(move |_| {
+                let next = (mode_index2.get() + 1) % MODES.len();
+                mode_index2.set(next);
+                visualization_button.set_label(MODES[next]);
+                let graph = {
+                    let core = core2.borrow();
+                    visualizer(next as u32, &core.background)
+                };
+                core2.borrow().command(&["set", "lavfi-complex", &graph]);
             });
             controls.append(&visualization);
         }
@@ -516,13 +546,19 @@ impl MediaView {
         serde_json::json!({"time":core.number("time-pos"),"duration":core.number("duration"),"hwdec":core.string("hwdec-current"),"video_format":core.string("video-format"),"visualizer":core.string("lavfi-complex"),"error":core.error})
     }
 }
-fn visualizer(mode: u32) -> &'static str {
+fn visualizer(mode: u32, background: &str) -> String {
+    // showwaves / showspectrum 输出带 alpha；先铺一层配置的背景色再叠波形，
+    // 否则 GL 区域会露出棋盘格，和音频播放器的深色面板不一致。
+    let color = background.trim_start_matches('#');
+    let color = if color.len() == 6 { color } else { "1e1e1e" };
     match mode {
-        1 => "[aid1]asplit[ao][a];[a]showwaves=s=1024x320:mode=cline:rate=30:colors=0x60a5fa[vo]",
-        2 => {
-            "[aid1]asplit[ao][a];[a]showspectrum=s=1024x320:mode=combined:color=rainbow:slide=scroll:scale=log[vo]"
-        }
-        _ => "",
+        1 => format!(
+            "[aid1]asplit[ao][a];color=c=0x{color}:s=1024x320:rate=30[bg];[a]showwaves=s=1024x320:mode=cline:rate=30:colors=0x60a5fa[wave];[bg][wave]overlay=shortest=1[vo]"
+        ),
+        2 => format!(
+            "[aid1]asplit[ao][a];color=c=0x{color}:s=1024x320:rate=30[bg];[a]showspectrum=s=1024x320:mode=combined:color=rainbow:slide=scroll:scale=log[wave];[bg][wave]overlay=shortest=1[vo]"
+        ),
+        _ => String::new(),
     }
 }
 fn clock(value: f64) -> String {

@@ -165,6 +165,8 @@ pub struct Controller {
     fullscreen_toggle_at: Cell<Option<Instant>>,
     /// 全屏时浮在内容上方的一行提示。
     fs_hint: gtk4::Label,
+    /// 按文件类型设置的内容区背景色（覆盖主题默认）。
+    bg_provider: gtk4::CssProvider,
     /// Only presses observed by this window are latched. A new preview must not
     /// wait for a release which may already have happened in the file manager.
     space_held: Cell<bool>,
@@ -188,6 +190,15 @@ impl Controller {
                 gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
             );
         }
+        // 背景色由配置逐次覆盖：单独一张优先级更高的表，换文件时只重载这张。
+        let bg_provider = gtk4::CssProvider::new();
+        if let Some(display) = gdk::Display::default() {
+            gtk4::style_context_add_provider_for_display(
+                &display,
+                &bg_provider,
+                gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION + 1,
+            );
+        }
         let window = gtk4::ApplicationWindow::builder()
             .application(app)
             .title("Quick Look")
@@ -200,12 +211,11 @@ impl Controller {
         let title = gtk4::Label::new(Some("Quick Look"));
         title.set_ellipsize(gtk4::pango::EllipsizeMode::Middle);
         title.set_single_line_mode(true);
-        title.set_max_width_chars(65);
+        title.set_max_width_chars(28);
         title.add_css_class("file-title");
         let subtitle = gtk4::Label::new(None);
         subtitle.add_css_class("dim-label");
         titlebox.append(&title);
-        titlebox.append(&subtitle);
         header.set_title_widget(Some(&titlebox));
         let prev = icon_button("go-previous-symbolic", "上一个文件（↑）");
         let next = icon_button("go-next-symbolic", "下一个文件（↓）");
@@ -223,6 +233,7 @@ impl Controller {
         let content = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
         content.set_vexpand(true);
         content.set_hexpand(true);
+        content.add_css_class("preview-bg");
         let main_area = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
         main_area.set_vexpand(true);
         main_area.append(&content);
@@ -247,27 +258,53 @@ impl Controller {
         let format_bar = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
         format_bar.add_css_class("format-bar");
         root.append(&format_bar);
-        let bottom = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
-        bottom.add_css_class("bottom-bar");
+        // 状态提示做成浮在内容底部的胶囊：不占布局高度，几秒后自动淡出，
+        // 内容区因此能占到窗口的九成以上。
+        let status_pill = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
+        status_pill.add_css_class("status-pill");
+        status_pill.set_halign(gtk4::Align::Start);
+        status_pill.set_valign(gtk4::Align::End);
+        status_pill.set_margin_start(12);
+        status_pill.set_margin_bottom(12);
         let status = gtk4::Label::new(Some("空格关闭 · ↑↓ 浏览 · Enter 打开"));
-        status.set_hexpand(true);
         status.set_xalign(0.);
         status.set_ellipsize(gtk4::pango::EllipsizeMode::End);
+        status.set_max_width_chars(70);
         status.add_css_class("dim-label");
-        bottom.append(&status);
+        status_pill.append(&status);
+        overlay.add_overlay(&status_pill);
+        {
+            let pill = status_pill.clone();
+            status.connect_notify_local(Some("label"), move |label, _| {
+                if label.text().is_empty() {
+                    pill.set_visible(false);
+                    return;
+                }
+                pill.set_visible(true);
+                let expected = label.text().to_string();
+                let pill = pill.clone();
+                let label = label.clone();
+                glib::timeout_add_local(Duration::from_millis(2600), move || {
+                    if label.text() == expected {
+                        pill.set_visible(false);
+                    }
+                    glib::ControlFlow::Break
+                });
+            });
+            status_pill.set_visible(false);
+        }
         let copy = icon_button("edit-copy-symbolic", "复制文件");
-        bottom.append(&copy);
+        header.pack_end(&copy);
         let properties = icon_button("document-properties-symbolic", "文件属性（I）");
-        bottom.append(&properties);
+        header.pack_end(&properties);
         let open_with = gtk4::MenuButton::builder()
             .icon_name("view-more-symbolic")
             .tooltip_text("打开方式 / 快捷键")
             .build();
-        bottom.append(&open_with);
-        let open = gtk4::Button::with_label("打开");
+        header.pack_end(&open_with);
+        let open = icon_button("document-open-symbolic", "用默认应用打开（Enter）");
         open.add_css_class("suggested-action");
-        bottom.append(&open);
-        root.append(&bottom);
+        header.pack_end(&open);
         window.set_child(Some(&root));
         let now = Instant::now();
         let controller = Rc::new(Self {
@@ -287,6 +324,7 @@ impl Controller {
             fullscreen: Cell::new(false),
             fullscreen_toggle_at: Cell::new(None),
             fs_hint,
+            bg_provider,
             space_held: Cell::new(false),
             state: RefCell::new(State {
                 selection: Vec::new(),
@@ -395,6 +433,22 @@ impl Controller {
         let menu_box = gtk4::Box::new(gtk4::Orientation::Vertical, 4);
         menu.set_child(Some(&menu_box));
         open_with.set_popover(Some(&menu));
+        // Popover 是独立表面，窗口的 EventControllerKey 收不到里面的按键。
+        // 菜单打开时按空格也应该关闭预览，而不是去激活菜单项。
+        let menu_key = gtk4::EventControllerKey::new();
+        menu_key.set_propagation_phase(gtk4::PropagationPhase::Capture);
+        let weak = Rc::downgrade(&controller);
+        menu_key.connect_key_pressed(move |_, key, _, _| {
+            if key == gdk::Key::space {
+                if let Some(c) = weak.upgrade() {
+                    c.close_by_user();
+                }
+                glib::Propagation::Stop
+            } else {
+                glib::Propagation::Proceed
+            }
+        });
+        menu.add_controller(menu_key);
         let weak = Rc::downgrade(&controller);
         open_with.connect_notify_local(Some("active"),move|button,_|{if !button.is_active(){return;}
 if let Some(c)=weak.upgrade(){clear(&menu_box);if let Some(info)=c.displayed(){for app in gio::AppInfo::all_for_type(&info.mime).into_iter().take(16){let launch=gtk4::Button::with_label(&app.display_name());let file=gio::File::for_uri(&info.uri);launch.connect_clicked(move|_|{if let Err(e)=app.launch(std::slice::from_ref(&file),None::<&gio::AppLaunchContext>){eprintln!("打开方式：{e}");}});menu_box.append(&launch);}}let help=gtk4::Label::new(Some("Space / Esc 关闭 · Ctrl+D 分离窗口\n↑ ↓ 文件导航 · F 全屏 · P 固定\nR 旋转 · 0 适应 · 1 原始像素\nK 暂停 · , . 逐帧 · < > 倍速\nW 换行 · E 编码\nCtrl+C 复制选中文本 / 文件"));help.set_margin_top(12);menu_box.append(&help);let settings=gtk4::Button::with_label("设置…");let weak_settings=Rc::downgrade(&c);settings.connect_clicked(move|_|{if let Some(c)=weak_settings.upgrade(){c.settings();}});menu_box.append(&settings);}});
@@ -427,6 +481,24 @@ if let Some(c)=weak.upgrade(){clear(&menu_box);if let Some(info)=c.displayed(){f
         // 浮动窗口规则负责）。每次窗口映射到屏幕就发一条
         // _NET_WM_STATE_ABOVE，独立窗口除外——它对标 Wayland 上平铺的
         // 独立预览，应当能被别的窗口盖住。
+        {
+            let weak = Rc::downgrade(&controller);
+            controller
+                .content
+                .connect_notify_local(Some("width"), move |_, _| {
+                    if let Some(c) = weak.upgrade() {
+                        c.resize_pdf_pages();
+                    }
+                });
+            let weak = Rc::downgrade(&controller);
+            controller
+                .content
+                .connect_notify_local(Some("height"), move |_, _| {
+                    if let Some(c) = weak.upgrade() {
+                        c.resize_pdf_pages();
+                    }
+                });
+        }
         let weak = Rc::downgrade(&controller);
         controller.window.connect_map(move |_| {
             let Some(c) = weak.upgrade() else {
@@ -625,9 +697,18 @@ if let Some(c)=weak.upgrade(){clear(&menu_box);if let Some(info)=c.displayed(){f
         // 用户就会觉得「空格有时候关不掉，要再按一次」。
         let inflight = {
             let s = self.state.borrow();
-            !self.window.is_visible() && s.shown_at.elapsed() < INFLIGHT_TOGGLE
+            // `shown_at` 在 Controller 创建时就初始化；刚启动的 viewer 在前 1.5 秒内
+            // 收到第一次 Toggle 时窗口当然还不可见，但这不是「还没画完又按了一次」。
+            // 只有已经接过一次 Show/Toggle（selection 非空）才可能是连按。
+            !s.selection.is_empty()
+                && !self.window.is_visible()
+                && s.shown_at.elapsed() < INFLIGHT_TOGGLE
         };
-        if mode == ShowMode::Toggle && same && (self.window.is_visible() || inflight) {
+        // Toggle 的语义是「按空格切换预览」：窗口已经可见时，无论宿主此刻报的是
+        // 哪一个文件，都应当关闭。此前要求 URI 完全相同才关闭，用户在文件管理器里
+        // 改选过文件、或宿主没有同步 SetSelection 时，就会变成「又打开一个新文件」，
+        // 看起来就是空格关不掉。
+        if mode == ShowMode::Toggle && (self.window.is_visible() || inflight) {
             self.close();
             return Ok(());
         }
@@ -645,10 +726,12 @@ if let Some(c)=weak.upgrade(){clear(&menu_box);if let Some(info)=c.displayed(){f
         self.size_window(None);
         self.state.borrow_mut().shown_at = Instant::now();
         self.space_held.set(false);
-        self.window.present();
         if infos.len() > 1 {
+            self.window.present();
             self.show_grid(infos);
         } else {
+            // 单文件先算尺寸再显示：GTK4 的 set_default_size 对已映射窗口无效，
+            // 图片/PDF 需要按页面比例开窗，只能等首帧渲染完再 present。
             let info = infos[0].clone();
             self.load(info.clone(), Spec::default());
             let generation = self.state.borrow().generation;
@@ -672,23 +755,8 @@ if let Some(c)=weak.upgrade(){clear(&menu_box);if let Some(info)=c.displayed(){f
             .or_else(|| monitors.item(0).and_downcast::<gdk::Monitor>());
         if let Some(monitor) = monitor {
             let r = monitor.geometry();
-            let maxw = (r.width() as f64 * 0.7) as i32;
-            let maxh = (r.height() as f64 * 0.7) as i32;
-            let (w, h) = if let Some(aspect) = aspect {
-                let contenth = (maxh - 140).max(180);
-                let w = (contenth as f64 * aspect) as i32;
-                if w > maxw {
-                    (maxw, (maxw as f64 / aspect) as i32 + 140)
-                } else {
-                    (w, contenth + 140)
-                }
-            } else {
-                // 用户在设置里指定的默认窗口大小；未设置（0）时退回 940×650。
-                let (base_w, base_h) = self.config.window_size().unwrap_or((940, 650));
-                (base_w.min(maxw), base_h.min(maxh))
-            };
-            self.window
-                .set_default_size(w.max(320).min(maxw), h.max(260).min(maxh));
+            let (w, h) = preview_size((r.width(), r.height()), aspect, self.config.window_size());
+            self.window.set_default_size(w, h);
         }
     }
     fn begin(&self) {
@@ -731,6 +799,7 @@ if let Some(c)=weak.upgrade(){clear(&menu_box);if let Some(info)=c.displayed(){f
         }
         self.title.set_text(&info.name);
         self.subtitle.set_text(&info.title());
+        self.title.set_tooltip_text(Some(&info.title()));
         self.window
             .set_title(Some(&format!("{} — Quick Look", info.name)));
         self.status.set_text("正在准备预览…");
@@ -1126,6 +1195,7 @@ if let Some(c)=weak.upgrade(){clear(&menu_box);if let Some(info)=c.displayed(){f
         }
         self.title.set_text(&crumb);
         self.subtitle.set_text(&subtitle);
+        self.title.set_tooltip_text(Some(&subtitle));
         self.window
             .set_title(Some(&format!("{crumb} — Quick Look")));
     }
@@ -1192,6 +1262,35 @@ if let Some(c)=weak.upgrade(){clear(&menu_box);if let Some(info)=c.displayed(){f
         true
     }
     /// 连续滚动模式：所有页一起按倍数缩放，并同步每页高度让滚动范围正确。
+    /// 每页高度取「按宽度排满」和「按高度排满」中较小的那个，再乘缩放。
+    fn pdf_page_height(&self, aspect: f64, zoom: f64) -> i32 {
+        // 页面按「宽度和高度都不溢出」缩放：竖排 PDF 在宽窗口里由高度决定，
+        // 横排页面由宽度决定；不能只看宽度，否则竖页会缩成窄条。
+        let width = self.content.width().max(320) as f64;
+        let height = self.content.height().max(200) as f64;
+        let fit = (width * aspect.max(0.05)).min(height);
+        (fit * zoom).clamp(120., 20_000.) as i32
+    }
+    fn resize_pdf_pages(&self) {
+        let (continuous, aspect, zoom, pages) = {
+            let s = self.state.borrow();
+            (
+                s.pdf_continuous,
+                s.pdf_aspect,
+                s.pdf_zoom,
+                s.pdf_pages.clone(),
+            )
+        };
+        if !continuous {
+            return;
+        }
+        let height = self.pdf_page_height(aspect, zoom);
+        for weak in &pages {
+            if let Some(canvas) = weak.upgrade() {
+                canvas.set_size_request(-1, height);
+            }
+        }
+    }
     fn zoom_all_pages(&self, factor: f64) {
         let mut s = self.state.borrow_mut();
         let z = (s.pdf_zoom * factor).clamp(0.25, 8.0);
@@ -1199,10 +1298,11 @@ if let Some(c)=weak.upgrade(){clear(&menu_box);if let Some(info)=c.displayed(){f
         let aspect = s.pdf_aspect;
         let pages = s.pdf_pages.clone();
         drop(s);
+        let height = self.pdf_page_height(aspect, z);
         for weak in &pages {
             if let Some(canvas) = weak.upgrade() {
                 canvas.set_zoom(z);
-                canvas.set_size_request(-1, (640. * aspect * z).clamp(120., 6000.) as i32);
+                canvas.set_size_request(-1, height);
             }
         }
     }
@@ -1283,6 +1383,13 @@ if let Some(c)=weak.upgrade(){clear(&menu_box);if let Some(info)=c.displayed(){f
             self.pdf_page_step(-1);
             return glib::Propagation::Stop;
         }
+        // 空格永远是关闭键，即使焦点落在页码输入框、格式栏按钮或文本视图里。
+        // 此前 `editing` 分支会把页码 SpinButton 里的空格直接放行，用户点过
+        // 页码之后再按空格就关不掉预览，看起来像「有时候空格失灵」。
+        if space_closes(key, modifiers) {
+            self.space_held.set(true);
+            return glib::Propagation::Stop;
+        }
         let editing = gtk4::prelude::RootExt::focus(&self.window)
             .map(|w| w.is::<gtk4::Editable>() || w.is::<gtk4::SpinButton>())
             .unwrap_or(false);
@@ -1323,12 +1430,6 @@ if let Some(c)=weak.upgrade(){clear(&menu_box);if let Some(info)=c.displayed(){f
             return glib::Propagation::Proceed;
         }
         match key {
-            gdk::Key::space => {
-                // Close on the release paired with a press observed here. This
-                // accepts the next tap immediately and keeps auto-repeat presses
-                // from bouncing focus between viewer and file manager.
-                self.space_held.set(true);
-            }
             gdk::Key::BackSpace => {
                 if !self.back() {
                     self.status.set_text("已经在最外层");
@@ -1509,6 +1610,33 @@ if let Some(c)=weak.upgrade(){clear(&menu_box);if let Some(info)=c.displayed(){f
         };
         self.status.set_text(&format!("{pct}% · Page Up/Down 翻页"));
     }
+    /// 当前文件对应的内容区背景色；`None` 表示跟随主题。
+    fn background_color(&self, info: &FileInfo) -> Option<gdk::RGBA> {
+        let value = match background_slot(info) {
+            "pdf" => &self.config.background_pdf,
+            "image" => &self.config.background_image,
+            "video" => &self.config.background_video,
+            "audio" => &self.config.background_audio,
+            "office" => &self.config.background_office,
+            "sheet" => &self.config.background_sheet,
+            "text" => &self.config.background_text,
+            _ => &self.config.background_other,
+        };
+        parse_color(value)
+    }
+    /// 非画布类视图（文本、列表等）用一张低优先级之上的 CSS 表换底色。
+    fn apply_background(&self, info: &quicklook_core::files::FileInfo) {
+        let css = match self.background_color(info) {
+            Some(color) => {
+                let value = color_text(&color);
+                format!(
+                    ".quicklook .preview-bg {{ background-color: {value}; }}\n                     .quicklook .preview-bg text {{ background-color: {value}; }}\n                     .quicklook .preview-bg listview, .quicklook .preview-bg gridview {{ background-color: {value}; }}"
+                )
+            }
+            None => String::new(),
+        };
+        self.bg_provider.load_from_string(&css);
+    }
     fn status_json(&self) -> serde_json::Value {
         let s = self.state.borrow();
         // Inside an archive the prepared file is what is on screen, so the
@@ -1543,8 +1671,99 @@ if let Some(c)=weak.upgrade(){clear(&menu_box);if let Some(info)=c.displayed(){f
         s.ready = true;
         s.last_error = error.into();
         s.last_elapsed_ms = s.request_start.elapsed().as_secs_f64() * 1000.;
+        drop(s);
+        if !self.window.is_visible() {
+            self.window.present();
+        }
     }
 }
+/// 依据显示器尺寸计算预览窗口默认尺寸：上限是显示器几何的 70%。
+///
+/// `aspect` 是图片/PDF 页面的宽高比（`None` 表示普通文档，直接用设置里的尺寸）；
+/// `configured` 是用户在设置里指定的固定尺寸，会按屏幕 70% 上限截断。
+/// 把文件归类到设置里的一档背景色。常见格式各自对齐经典应用，
+/// 其余（目录、压缩包、字体等）统一落到「其它」。
+fn background_slot(info: &FileInfo) -> &'static str {
+    let name = info.name.to_ascii_lowercase();
+    let ext = name.rsplit('.').next().unwrap_or("");
+    let audio = info.mime.starts_with("audio/")
+        || matches!(ext, "mp3" | "flac" | "wav" | "ogg" | "m4a" | "opus" | "aac");
+    match info.kind {
+        Kind::Pdf => "pdf",
+        Kind::Image | Kind::Raw | Kind::Psd | Kind::Eps => "image",
+        Kind::Media if audio => "audio",
+        Kind::Media => "video",
+        Kind::Office if matches!(ext, "xlsx" | "xls" | "ods") => "sheet",
+        Kind::Office => "office",
+        Kind::Text | Kind::Markdown | Kind::Html | Kind::Structured | Kind::Rtf
+            if matches!(ext, "csv" | "tsv") =>
+        {
+            "sheet"
+        }
+        Kind::Text | Kind::Markdown | Kind::Html | Kind::Structured | Kind::Rtf => "text",
+        _ => "other",
+    }
+}
+/// 解析 `#RRGGBB` 配置色。
+fn parse_color(value: &str) -> Option<gdk::RGBA> {
+    let text = value.trim();
+    let bytes = text.as_bytes();
+    if bytes.len() != 7 || bytes[0] != b'#' {
+        return None;
+    }
+    let channel = |range: std::ops::Range<usize>| -> Option<f32> {
+        let hex = std::str::from_utf8(&bytes[range]).ok()?;
+        Some(u8::from_str_radix(hex, 16).ok()? as f32 / 255.)
+    };
+    Some(gdk::RGBA::new(
+        channel(1..3)?,
+        channel(3..5)?,
+        channel(5..7)?,
+        1.,
+    ))
+}
+fn color_text(color: &gdk::RGBA) -> String {
+    let channel = |value: f32| (value * 255.).round().clamp(0., 255.) as u8;
+    format!(
+        "#{:02x}{:02x}{:02x}",
+        channel(color.red()),
+        channel(color.green()),
+        channel(color.blue())
+    )
+}
+
+/// 空格是预览窗口的关闭键。Ctrl/Alt+空格留给窗口管理器或输入法，
+/// 其余情况（包括焦点在页码 SpinButton 或按钮上）都必须关闭。
+fn space_closes(key: gdk::Key, modifiers: gdk::ModifierType) -> bool {
+    key == gdk::Key::space
+        && !modifiers.contains(gdk::ModifierType::CONTROL_MASK)
+        && !modifiers.contains(gdk::ModifierType::ALT_MASK)
+}
+
+fn preview_size(
+    monitor: (i32, i32),
+    aspect: Option<f64>,
+    configured: Option<(i32, i32)>,
+) -> (i32, i32) {
+    let maxw = (monitor.0 as f64 * 0.7) as i32;
+    let maxh = (monitor.1 as f64 * 0.7) as i32;
+    // 标题栏 + 格式栏 + 状态栏的实际高度；窗口按它给内容留位。
+    const CHROME: i32 = 104;
+    let (w, h) = if let Some(aspect) = aspect {
+        let contenth = (maxh - CHROME).max(180);
+        let w = (contenth as f64 * aspect) as i32;
+        if w > maxw {
+            (maxw, (maxw as f64 / aspect) as i32 + CHROME)
+        } else {
+            (w, contenth + CHROME)
+        }
+    } else {
+        let (base_w, base_h) = configured.unwrap_or((940, 650));
+        (base_w.min(maxw), base_h.min(maxh))
+    };
+    (w.max(320).min(maxw), h.max(260).min(maxh))
+}
+
 fn icon_button(icon: &str, tooltip: &str) -> gtk4::Button {
     gtk4::Button::builder()
         .icon_name(icon)
@@ -1617,5 +1836,55 @@ mod page_scroll_tests {
         assert_eq!(page_scroll_target(1104., 600., 6000., -1), 552.);
         assert_eq!(page_scroll_target(0., 600., 6000., -1), 0.);
         assert_eq!(page_scroll_target(5400., 600., 6000., 1), 5400.);
+    }
+}
+
+#[cfg(test)]
+mod window_size_tests {
+    use super::{preview_size, space_closes};
+    use gtk4::gdk;
+
+    #[test]
+    fn space_closes_unless_control_or_alt_is_held() {
+        assert!(space_closes(gdk::Key::space, gdk::ModifierType::empty()));
+        assert!(space_closes(gdk::Key::space, gdk::ModifierType::SHIFT_MASK));
+        assert!(!space_closes(
+            gdk::Key::space,
+            gdk::ModifierType::CONTROL_MASK
+        ));
+        assert!(!space_closes(gdk::Key::space, gdk::ModifierType::ALT_MASK));
+        assert!(!space_closes(gdk::Key::Escape, gdk::ModifierType::empty()));
+    }
+
+    #[test]
+    fn default_size_is_the_configured_nine_forty_by_six_fifty() {
+        assert_eq!(preview_size((1920, 1080), None, None), (940, 650));
+    }
+
+    #[test]
+    fn explicit_size_is_respected_but_capped_at_seventy_percent() {
+        assert_eq!(
+            preview_size((1920, 1080), None, Some((1120, 790))),
+            (1120, 756)
+        );
+        assert_eq!(
+            preview_size((1920, 1080), None, Some((2400, 1400))),
+            (1344, 756)
+        );
+    }
+
+    #[test]
+    fn page_aspect_only_leaves_chrome_outside_the_content() {
+        let (w, h) = preview_size((1920, 1080), Some(16.0 / 9.0), None);
+        assert_eq!(h, 756);
+        assert_eq!(h - 104, 652);
+        assert!(w <= 1344, "w = {w}");
+        assert!(w > 1100, "w = {w}");
+    }
+
+    #[test]
+    fn a_small_monitor_still_gets_a_usable_window() {
+        let (w, h) = preview_size((1024, 768), None, None);
+        assert_eq!((w, h), (716, 537));
     }
 }

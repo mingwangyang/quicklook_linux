@@ -248,10 +248,10 @@ pub const STUCK_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(
 /// 打到预览窗口，宿主手里的锁存还停在「按下」，于是这一次新按键会被误判成自动重复
 /// 吞掉——用户看到的就是「空格有时候关不掉，得再按一次」。
 ///
-/// X/Wayland 的自动重复间隔默认约 33ms（即使把 `xset r rate` 调慢也很少超过 100ms），
-/// 而人手两次有意的按键之间一般在 150ms 以上，所以用 150ms 区分：
+/// X/Wayland 的自动重复间隔默认约 33ms（即使把 `xset r rate` 调慢也很少超过 50ms），
+/// 而人手两次有意的按键之间通常也就在 80ms 以上，所以用 80ms 区分：
 /// 更短视为自动重复（吞掉），更长视为新的一次按下（照常触发 Toggle）。
-pub const REPEAT_GAP: std::time::Duration = std::time::Duration::from_millis(150);
+pub const REPEAT_GAP: std::time::Duration = std::time::Duration::from_millis(80);
 
 /// Per-host pressed state; releases and focus changes reset it immediately.
 /// The timestamp only heals a latch whose key-up was never delivered.

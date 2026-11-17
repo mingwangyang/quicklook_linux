@@ -780,3 +780,65 @@ clippy 0 警告、fmt 干净。三个适配器与 viewer 均重新构建。
 **测试教训**：验证脚本里 `pkill -f quicklook-viewer` / `pgrep` 会自匹配包住同名字符串的外层 `bash -c`，把整个测试 shell 连同 dbus-run-session 一起杀掉，表现为「脚本莫名挂死」。清进程一律按 `/proc/<pid>/exe` 的 basename 判断后 `os.kill`。
 
 **质量门**：134 项测试、clippy 0 警告、fmt 干净。
+
+## 预览窗口内容区占九成 + 按文件类型设置显示背景（0.0.11）
+
+**需求**：用户希望「窗口中用于显示的部分」占 90% 以上（不是窗口占屏幕 90%），并且显示区域背景色能按文件类型调整、PDF 默认参考常见阅读器。
+
+**原来为什么只有八成多**：窗口总高 756 时，标题栏（两行：文件名 + `PDF · 2.1 MiB`）约 54 px，格式栏 32 px，底部状态栏另占一行；三者相加把内容区压到 670 px 以下。PDF 还固定按设置里的 1120×790 开横向窗口，页面竖排后两侧各留 300 多像素空白。
+
+**修法**：
+- 标题栏压成单行：`subtitle` 不再放进 `HeaderBar` 的 title widget，文件类型/大小改挂到标题的 tooltip；`title.set_max_width_chars(28)` + 中间省略。
+- 底部状态栏不再占布局：`status` 装进 `.status-pill`，作为 `Overlay` 的 `valign=End` 浮层，出现 2.6 秒后自动隐藏；格式栏保留，但提示文案缩短为「连续滚动 · Ctrl+滚轮缩放」并允许省略。
+- 图片 / PDF 按页面比例开窗：`pdf_view()` 在 `set_pdf()` 后调用 `size_window(Some(pixels.width / pixels.height))`。
+- **GTK4 的 `set_default_size` 对已映射窗口无效**：原来的 `show()` 先 `window.present()` 再 `load()`，此时再算尺寸不会生效（实测请求 503×756，窗口仍是 861×756）。改成单文件不立即 present，等 `render()` 末尾（或 `error()`）首帧准备好再 `present()`；多文件网格仍立即 present。
+- 背景色：`Config` 新增 `background_pdf` / `background_image` / `background_video` / `background_audio` / `background_office` / `background_sheet` / `background_text` / `background_other`（`#RRGGBB`，空串=跟随主题），`normalize()` 校验非法值。`background_slot()` 按 `Kind` + MIME/扩展名把文件分成 PDF / 图片 / 视频 / 音频 / 文档 / 表格 / 文本 / 其它八档；`Canvas` 新增 `set_background(Option<RGBA>)` 取代快照里硬编码的近黑蓝；PDF 视图/连续模式每个页面画布都设 `background_pdf`（默认 `#333333`），图片画布设 `background_image`，WebView 设 `background_office` / `background_sheet` / `background_text`。音频 `MediaView` 把背景色传给 libmpv 的波形合成并设 `keepaspect=no`，避免 1024×320 波形留下黑边。设置窗口「外观」页八行颜色选择器（自定义勾选 + `ColorDialogButton`）。
+
+**实测（1920×1080，niri，release）**：PDF 页面 1525×1973 px（aspect 0.773），`size_window` 计算 503×756；受标题栏按钮最小宽度约束，实际窗口 548×756；`Status` 内部布局 `window 548×756`、`header 40`、`format 32`、`content 548×670`。GTK 内容区（不含窗口阴影）742 px，内容占比 670/742 = **90.3%**。PDF 页宽 670×0.773 ≈ 518，左右各 ~15 px 深灰边。
+
+**质量门**：138 项测试、clippy 0 警告、fmt 干净。
+
+## 修「有时候空格关闭不了」（0.0.12）
+
+**现象**：预览窗口大部分时候空格能关，但点过 PDF 格式栏的页码输入框后，再按空格就没有反应；重新打开预览（焦点回到画布）又能关一次，所以表现为「有时候」。
+
+**根因**：`crates/daemon/src/ui/mod.rs` 的 `Controller::key()` 为保护 `+` / `-` / `F` 等快捷键，在 `Page Up/Down` 之后加了一段 `editing` 判定：焦点控件是 `GtkEditable` 或 `GtkSpinButton` 时直接 `return glib::Propagation::Proceed`。PDF 的页码控件正是 `GtkSpinButton`，点过它之后空格也被当成「正在输入」放行；窗口的 `connect_key_released` 只在 `space_held` 为真时关闭，而 `space_held` 只在 `key()` 的 match 分支里置位，于是 release 回调看到 `false`，预览关不掉。
+
+**修法**：
+- 在 `editing` 判定之前处理空格：`space_closes(key, modifiers)` 只排除 `Ctrl` 和 `Alt`（把这两种组合留给窗口管理器/输入法），其余 `Space` 都返回 `glib::Propagation::Stop` 并置 `space_held=true`；release 回调随后照常关闭。这样焦点在页码 SpinButton、格式栏按钮或文本视图时，空格仍是关闭键。
+- 删除原来 `match key` 里永远走不到的 `gdk::Key::space` 分支，避免两处逻辑漂移。
+- 新增单元测试 `space_closes_unless_control_or_alt_is_held`：无修饰键 / Shift 为 true，Ctrl / Alt 为 false，非空格键为 false。
+
+**质量门**：139 项测试、clippy 0 警告、fmt 干净。该修复不改变「按空格打开、松开不关闭」的既有行为：打开预览的那次按键仍由文件管理器消费，预览窗口只处理之后成对的按下/抬起。
+
+## 修「不止 PDF」的空格关闭（0.0.13）
+
+用户反馈 0.0.12 后空格关闭仍偶尔失效，且不限于 PDF。逐项复现后分三类修：
+
+1. **音频/视频控制栏的下拉框**：倍速与可视化原用 `GtkDropDown`，点开后弹出独立的 `GtkPopover` 表面，预览窗口收不到空格。改为循环按钮（无独立表面），空格始终进窗口。
+2. **窗口可见时 Toggle 不关闭**：`show()` 原来要求 `state.selection` 与传入 URI 相同才关闭；宿主改选文件或未同步 `SetSelection` 时，Toggle 变成重开新文件。改为窗口可见/加载中时任何 Toggle 都关闭。
+3. **宿主焦点不在文件视图**：Thunar/Caja/Nemo 适配器原来依赖 `find_view` 与 `HoldLatch`；焦点在路径栏、搜索框或锁止卡住时，空格被吞。适配器在空格按下时先调用 `quicklook_core::protocol::preview_visible()`，可见就 `close_preview()` 并返回；`REPEAT_GAP` 从 150ms 收到 80ms，降低快速双击被当自动重复的概率。另给「打开方式」Popover 挂 `EventControllerKey`，菜单里空格也关闭。
+
+验证：Thunar 路径栏聚焦（`Ctrl+L`）后空格关闭预览通过；CSV/图片/PDF/文本/HTML/格式栏/音频控制按钮/打开方式菜单在 Xephyr 隔离会话中均通过；139 项测试、clippy 0、fmt 干净。包：`dist/quicklook_V0.0.13_amd64.deb`。
+
+
+## 修「空格唤起后必须鼠标点一下才能关闭」（0.0.14）
+
+**现象**：从 Thunar 按空格打开预览后，预览窗口显示出来，但直接再按空格没有反应；必须先用鼠标点一下预览窗口，之后空格才关闭。
+
+**根因**：`crates/daemon/src/ui/mod.rs` 的 `show()` 用 `inflight` 判定「窗口还没画出来时又收到一次 Toggle」：
+
+```rust
+let inflight = {
+    let s = self.state.borrow();
+    !self.window.is_visible() && s.shown_at.elapsed() < INFLIGHT_TOGGLE
+};
+```
+
+但 `shown_at` 在 `Controller::new` 里就初始化成 `Instant::now()`；broker 拉起 viewer 后，第一次 `Toggle` 到达时窗口当然尚不可见，`shown_at.elapsed()` 也必然小于 1.5 秒，于是第一次打开被误判成「连按的第二下」，`show()` 直接 `close()`，预览窗口闪一下就不见了。命令行的 `Show` 不走这个分支，所以 `quicklook --show` 看起来正常，只有文件管理器的空格 `Toggle` 中招。
+
+**修法**：
+- `inflight` 增加 `!s.selection.is_empty()` 条件：只有 viewer 已经接过一次 Show/Toggle（选区非空）才可能是连按；全新 viewer 的第一次 Toggle 一律按打开处理。
+- Thunar / Caja 适配器在 `snoop` 开头检查 `gtk_widget_get_toplevel(widget)` 且 `gtk_window_is_active(top)`；只有宿主窗口自身处于活动状态才处理空格。预览窗口获得焦点后，即使合成器把同一串按键也投递给宿主，宿主也不会再执行一次「关闭 + 打开」，避免预览被换成下一个文件。
+
+**验证**：私有 D-Bus 会话里用 `target/release/quicklookd` 直接 `Toggle file:///tmp/ql99/thunar.png`，返回 `visible=true body=image`，窗口 `thunar.png — Quick Look` 获得焦点；随后 `ydotool type ' '` 返回 `visible=false`，首次打开与空格关闭均正常。139 项测试、clippy 0 警告、fmt 干净。

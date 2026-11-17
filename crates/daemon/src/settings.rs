@@ -5,7 +5,7 @@
 //! 重新安装二进制也不会把用户的选择改回去。
 use anyhow::{Context, Result};
 use gio::prelude::*;
-use gtk4::prelude::*;
+use gtk4::{gdk, prelude::*};
 use quicklook_core::{
     config::{Config, config_path},
     hosts,
@@ -502,6 +502,11 @@ fn startup_section(
     collector.borrow_mut().add(restore, capture);
 }
 
+/// 「按内容自动」时展示的参考尺寸（实际按图片/PDF 页面比例计算）。
+fn auto_window_size() -> (f64, f64) {
+    (940., 650.)
+}
+
 fn window_section(
     root: &gtk4::Box,
     config: &Config,
@@ -543,7 +548,7 @@ fn window_section(
     let (width0, height0) = config
         .window_size()
         .map(|(w, h)| (w as f64, h as f64))
-        .unwrap_or((940., 650.));
+        .unwrap_or_else(auto_window_size);
     let size_row = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
     let width = gtk4::SpinButton::with_range(480., 7680., 20.);
     width.set_value(width0);
@@ -556,7 +561,7 @@ fn window_section(
     size_row.append(&gtk4::Label::new(Some("×  高")));
     size_row.append(&height);
     size.append(&size_row);
-    let auto = gtk4::CheckButton::with_label("按内容自动（不固定尺寸）");
+    let auto = gtk4::CheckButton::with_label("按内容自动（图片 / PDF 按页面比例）");
     auto.set_active(auto_start);
     size.append(&auto);
     width.set_sensitive(!auto_start);
@@ -570,9 +575,9 @@ fn window_section(
         });
     }
     size.append(&hint(
-        "设置预览窗口打开时的初始大小（逻辑像素）。默认 940×650，会受屏幕可用区域限制，\
-         不会超出屏幕。改完点「保存设置」，下一次打开预览窗口时生效。\
-         勾选「按内容自动」则不固定尺寸，由每类内容自行决定（图片/PDF 按比例铺满可用空间）。",
+        "设置预览窗口打开时的初始大小（逻辑像素），最大不超过屏幕的 70%。\
+         改完点「保存设置」，下一次打开预览窗口时生效。勾选「按内容自动」时，\
+         图片和 PDF 会按页面比例定窗口，让页面本身占满内容区（内容区约占窗口九成）。",
     ));
     let size_restore = {
         let width = width.clone();
@@ -584,7 +589,7 @@ fn window_section(
             let (w, h) = source
                 .window_size()
                 .map(|(w, h)| (w as f64, h as f64))
-                .unwrap_or((940., 650.));
+                .unwrap_or_else(auto_window_size);
             width.set_value(w);
             height.set_value(h);
             width.set_sensitive(!autofit);
@@ -622,6 +627,81 @@ fn appearance_section(
     inner.append(&row);
     inner.append(&hint(
         "默认浅色。保存后设置窗口立即切换，之后打开的预览窗口使用新主题；已打开的预览窗口重新打开后生效。",
+    ));
+    background_row(
+        &inner,
+        collector,
+        "PDF 背景色",
+        &config.background_pdf,
+        gdk::RGBA::new(0.2, 0.2, 0.2, 1.),
+        |source| source.background_pdf.clone(),
+        |target, value| target.background_pdf = value,
+    );
+    background_row(
+        &inner,
+        collector,
+        "图片背景色",
+        &config.background_image,
+        gdk::RGBA::new(0.12, 0.12, 0.12, 1.),
+        |source| source.background_image.clone(),
+        |target, value| target.background_image = value,
+    );
+    background_row(
+        &inner,
+        collector,
+        "视频背景色",
+        &config.background_video,
+        gdk::RGBA::new(0., 0., 0., 1.),
+        |source| source.background_video.clone(),
+        |target, value| target.background_video = value,
+    );
+    background_row(
+        &inner,
+        collector,
+        "音频背景色",
+        &config.background_audio,
+        gdk::RGBA::new(0.12, 0.12, 0.12, 1.),
+        |source| source.background_audio.clone(),
+        |target, value| target.background_audio = value,
+    );
+    background_row(
+        &inner,
+        collector,
+        "文档背景色",
+        &config.background_office,
+        gdk::RGBA::new(0.9, 0.9, 0.9, 1.),
+        |source| source.background_office.clone(),
+        |target, value| target.background_office = value,
+    );
+    background_row(
+        &inner,
+        collector,
+        "表格背景色",
+        &config.background_sheet,
+        gdk::RGBA::new(1., 1., 1., 1.),
+        |source| source.background_sheet.clone(),
+        |target, value| target.background_sheet = value,
+    );
+    background_row(
+        &inner,
+        collector,
+        "文本背景色",
+        &config.background_text,
+        gdk::RGBA::new(0.97, 0.97, 0.98, 1.),
+        |source| source.background_text.clone(),
+        |target, value| target.background_text = value,
+    );
+    background_row(
+        &inner,
+        collector,
+        "其它类型背景色",
+        &config.background_other,
+        gdk::RGBA::new(0.12, 0.14, 0.17, 1.),
+        |source| source.background_other.clone(),
+        |target, value| target.background_other = value,
+    );
+    inner.append(&hint(
+        "默认色向常见应用看齐：PDF #333333（Evince / Acrobat 深灰）、图片 #1f1f1f（Gwenview / EOG）、视频 #000000（mpv / VLC）、音频 #1e1e1e（Audacity）、文档 #e6e6e6（LibreOffice 桌面灰）、表格 #ffffff（Calc 单元格白）。取消「自定义」则跟随主题；背景色在打开下一个文件时生效。",
     ));
     let mermaid = gtk4::Switch::new();
     mermaid.set_active(config.mermaid);
@@ -957,6 +1037,86 @@ fn section(root: &gtk4::Box, title: &str) -> gtk4::Box {
     inner
 }
 
+fn parse_hex_color(value: &str) -> Option<gdk::RGBA> {
+    let bytes = value.trim().as_bytes();
+    if bytes.len() != 7 || bytes[0] != b'#' {
+        return None;
+    }
+    let channel = |range: std::ops::Range<usize>| -> Option<f32> {
+        let hex = std::str::from_utf8(&bytes[range]).ok()?;
+        Some(u8::from_str_radix(hex, 16).ok()? as f32 / 255.)
+    };
+    Some(gdk::RGBA::new(
+        channel(1..3)?,
+        channel(3..5)?,
+        channel(5..7)?,
+        1.,
+    ))
+}
+fn hex_color(color: &gdk::RGBA) -> String {
+    let channel = |value: f32| (value * 255.).round().clamp(0., 255.) as u8;
+    format!(
+        "#{:02x}{:02x}{:02x}",
+        channel(color.red()),
+        channel(color.green()),
+        channel(color.blue())
+    )
+}
+/// 一行「自定义」勾选 + 颜色按钮；取消勾选就写空字符串（跟随主题）。
+fn background_row(
+    inner: &gtk4::Box,
+    collector: &std::rc::Rc<std::cell::RefCell<Fields>>,
+    title: &str,
+    value: &str,
+    fallback: gdk::RGBA,
+    get: fn(&Config) -> String,
+    set: fn(&mut Config, String),
+) {
+    let row = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
+    let label = gtk4::Label::new(Some(title));
+    label.set_xalign(0.);
+    label.set_hexpand(true);
+    let custom = gtk4::CheckButton::with_label("自定义");
+    let button = gtk4::ColorDialogButton::new(Some(gtk4::ColorDialog::new()));
+    button.set_rgba(&parse_hex_color(value).unwrap_or(fallback));
+    let active = !value.is_empty();
+    custom.set_active(active);
+    button.set_sensitive(active);
+    row.append(&label);
+    row.append(&custom);
+    row.append(&button);
+    inner.append(&row);
+    {
+        let button = button.clone();
+        custom.connect_toggled(move |check| button.set_sensitive(check.is_active()));
+    }
+    let restore = {
+        let custom = custom.clone();
+        let button = button.clone();
+        Box::new(move |source: &Config| {
+            let value = get(source);
+            let active = !value.is_empty();
+            custom.set_active(active);
+            button.set_sensitive(active);
+            if let Some(color) = parse_hex_color(&value) {
+                button.set_rgba(&color);
+            }
+        })
+    };
+    let capture = {
+        let custom = custom.clone();
+        let button = button.clone();
+        Box::new(move |target: &mut Config| {
+            let value = if custom.is_active() {
+                hex_color(&button.rgba())
+            } else {
+                String::new()
+            };
+            set(target, value);
+        })
+    };
+    collector.borrow_mut().add(restore, capture);
+}
 fn hint(text: &str) -> gtk4::Label {
     let label = gtk4::Label::new(Some(text));
     label.set_xalign(0.);
