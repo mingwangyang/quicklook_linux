@@ -911,3 +911,25 @@ let inflight = {
 - 预热：`quicklookd` 启动 1.2s 后 viewer 已存在（`--idle-exit-ms=3600000`）；`Show a.png` CLI 返回 `10.2ms`、`visible` 在 `154ms` 出现，`request_to_content_ms=49.9968`；35 秒后 viewer 仍在。
 - 安装版 0.0.18：清理旧 broker/viewer 后启动新 broker，预热 1 秒内完成；`quicklook --show /tmp/ql99/a.png` 的 CLI 返回 `14.1ms`、`visible` `23.3ms` 出现（同一轮实测），说明 deb 包内预热链路生效。
 - 139 项 Rust 测试、`clippy -D warnings`、`cargo fmt --check` 全部通过。
+
+## 文件夹第二次唤起后空格失效 + 预热不阻塞 broker（0.0.19）
+
+### 现象与根因
+
+- 文件夹预览第一次打开正常；关闭后第二次唤起，预览窗口获得焦点、状态为 `visible=true`，但再按空格 `generation` 不变、窗口不关闭。
+- 目录预览的 `Body::Directory` 使用 `GtkListView`。第一次显示后列表控件保留键盘焦点；第二次 `present_preview()` 时窗口重新映射，焦点仍在列表内部，空格被列表消费，窗口级 Capture `EventControllerKey` 收不到 press/release。
+- 另外 `quicklookd` 的 `prewarm()` 原先在 broker 主线程里同步 `wait_for_viewer(5s)`；viewer 首次 GTK/WebKit 初始化较慢时会把 broker 阻塞，第一次 `Show/Status` 反而超时。
+
+### 修法
+
+- `crates/daemon/src/ui/mod.rs` `present_preview()`：`window.present()` + `focus_preview()` 后立即 `content.grab_focus()`；120ms 后再执行一次 `window.grab_focus()` + `content.grab_focus()`（并保留 GDK toplevel focus），确保每次显示都把焦点从 `GtkListView` 拉回内容容器。
+- `crates/cli/src/service.rs`：抽出 `spawn_viewer(grace)`，只创建 viewer 进程；`start_viewer_with_grace()` 继续 `spawn_viewer` + `wait_for_viewer(5s)`；`prewarm()` 只调用 `spawn_viewer(3600s)` 后立即返回，broker 在 viewer 冷启动期间仍能响应 `Status`/`Show`。
+
+### 验证
+
+- Xephyr X11 + metacity + 私有 D-Bus，target Thunar 选中 `folder` 行后连续按空格六次：`visible` 依次 `true/false/true/false/true/false`，全部交替正常；第二次、第三次唤起后均可直接空格关闭，无需鼠标点击。
+- Markdown `Show` 后 `body=markdown`、`ready=false` 时按空格：`visible=false`，渲染过程中同样可以关闭。
+- 预热：临时 HOME `autostart=true` 启动 target `quicklookd`，`Status` 首次响应 **14ms**（`viewer_running=false`），同时 viewer 子进程已在后台启动；说明预热不再阻塞 broker。
+- 安装版 0.0.19（niri，`quicklook --show /tmp/ql99/folder`）：第一次 `visible=true body=directory`；`--close` 后第二次再 `Show` 仍 `visible=true`，焦点为 `folder — Quick Look`；`ydotool type ' '` 后 `visible=false`，第二次唤起可直接空格关闭。
+- 安装版 0.0.19 预热：手动启动 `/usr/bin/quicklookd` 后 2 秒，viewer 为 `--idle-exit-ms=3600000`；随后 `quicklook --show /tmp/ql99/a.png` CLI 返回 **15ms**，`request_to_content_ms=35.4ms`。
+- 139 项 Rust 测试、`cargo clippy --release --workspace --offline -- -D warnings`、`cargo fmt --all --check` 全部通过。

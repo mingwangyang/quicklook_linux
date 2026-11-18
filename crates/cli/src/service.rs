@@ -65,6 +65,13 @@ impl Service {
         if already_starting {
             return self.wait_for_viewer(Duration::from_secs(5));
         }
+        self.spawn_viewer(grace)?;
+        self.wait_for_viewer(Duration::from_secs(5))
+    }
+    /// 只负责把 viewer 进程拉起来，不在 broker 里阻塞等它初始化。
+    /// 预热路径必须用它：GTK/WebKit 首次初始化可能几十秒，若在这里
+    /// 同步等待，broker 会连 Status 都无法响应，第一次 Show 反而超时。
+    fn spawn_viewer(&self, grace: Duration) -> Result<()> {
         let path = std::env::current_exe()?
             .parent()
             .context("无法定位服务目录")?
@@ -88,7 +95,7 @@ impl Service {
             let _ = previous.kill();
             let _ = previous.wait();
         }
-        self.wait_for_viewer(Duration::from_secs(5))
+        Ok(())
     }
     fn wait_for_viewer(&self, timeout: Duration) -> Result<()> {
         let start = Instant::now();
@@ -114,7 +121,27 @@ impl Service {
         if !self.config.borrow().autostart {
             return;
         }
-        let _ = self.start_viewer_with_grace(Duration::from_secs(3600));
+        if self.viewer("Status", None).is_ok() {
+            return;
+        }
+        let already_starting = {
+            let mut slot = self.child.borrow_mut();
+            let status = slot.as_mut().map(|child| child.try_wait().ok().flatten());
+            match status {
+                Some(None) => true,
+                Some(Some(_)) => {
+                    slot.take();
+                    false
+                }
+                None => false,
+            }
+        };
+        if already_starting {
+            return;
+        }
+        // 不等待 viewer 注册总线名：预热是后台动作，broker 必须继续响应
+        // 用户的第一次 Show/Status。viewer 就绪后下一次 Show 直接复用。
+        let _ = self.spawn_viewer(Duration::from_secs(3600));
     }
     fn update_nemo(&self, force: bool) -> Result<()> {
         let config = self.config.borrow();

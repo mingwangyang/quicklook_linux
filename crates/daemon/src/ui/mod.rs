@@ -788,7 +788,12 @@ if let Some(c)=weak.upgrade(){clear(&menu_box);if let Some(info)=c.displayed(){f
     fn present_preview(&self) {
         self.window.present();
         self.focus_preview();
+        // 文件夹预览等内容会把键盘焦点交给内部的 ListView；第二次显示时
+        // ListView 仍保留焦点，空格会被列表控件吃掉。每次显示后把焦点
+        // 拉回内容容器，保证窗口级按键控制器能收到 press/release。
+        self.content.grab_focus();
         let window = self.window.downgrade();
+        let content = self.content.downgrade();
         glib::timeout_add_local_once(Duration::from_millis(120), move || {
             if let Some(window) = window.upgrade() {
                 window.set_can_focus(true);
@@ -799,6 +804,9 @@ if let Some(c)=weak.upgrade(){clear(&menu_box);if let Some(info)=c.displayed(){f
                 {
                     toplevel.focus(gdk::CURRENT_TIME);
                 }
+            }
+            if let Some(content) = content.upgrade() {
+                content.grab_focus();
             }
         });
     }
