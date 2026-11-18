@@ -1198,7 +1198,8 @@ impl Controller {
     pub(super) fn update_properties(&self) {
         if let Some(file) = self.displayed().as_ref() {
             let body = gtk4::Box::new(gtk4::Orientation::Vertical, 12);
-            body.set_size_request(270, -1);
+            body.set_size_request(340, -1);
+            body.add_css_class("inspector-body");
             body.set_margin_start(20);
             body.set_margin_end(20);
             body.set_margin_top(20);
@@ -1220,13 +1221,22 @@ impl Controller {
                     details.push_str(&format!("\n{key}：{value}"));
                 }
             }
-            let label = gtk4::Label::new(Some(&details));
-            label.set_max_width_chars(32);
+            // 先把换行/宽度属性配好再塞文本，避免 GtkLabel 先用自然宽度排版、
+            // 随后因属性变化再换行重排一次（属性栏会先闪一下再跳）。
+            let label = gtk4::Label::new(None::<&str>);
+            label.set_max_width_chars(48);
+            label.set_width_chars(44);
+            label.set_hexpand(true);
             label.set_selectable(true);
             label.set_wrap(true);
+            label.set_wrap_mode(gtk4::pango::WrapMode::WordChar);
             label.set_xalign(0.);
+            label.set_text(&details);
             body.append(&label);
-            self.inspector.set_child(Some(&scroll(&body)));
+            let scroll = scroll(&body);
+            scroll.add_css_class("inspector-scroll");
+            scroll.set_size_request(380, -1);
+            self.inspector.set_child(Some(&scroll));
         }
     }
     fn font_view(&self, file: &FileInfo, font: &crate::backend::FontData) {

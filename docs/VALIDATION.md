@@ -933,3 +933,13 @@ let inflight = {
 - 安装版 0.0.19（niri，`quicklook --show /tmp/ql99/folder`）：第一次 `visible=true body=directory`；`--close` 后第二次再 `Show` 仍 `visible=true`，焦点为 `folder — Quick Look`；`ydotool type ' '` 后 `visible=false`，第二次唤起可直接空格关闭。
 - 安装版 0.0.19 预热：手动启动 `/usr/bin/quicklookd` 后 2 秒，viewer 为 `--idle-exit-ms=3600000`；随后 `quicklook --show /tmp/ql99/a.png` CLI 返回 **15ms**，`request_to_content_ms=35.4ms`。
 - 139 项 Rust 测试、`cargo clippy --release --workspace --offline -- -D warnings`、`cargo fmt --all --check` 全部通过。
+
+## 文件属性侧栏加宽（0.0.20）
+
+**现象**：按下 `I` 后属性侧栏太窄，文件名、路径和 URI 被压成细条，难以阅读。
+
+**修改**：
+- `crates/daemon/src/ui/views.rs` 的 `update_properties`：正文 Box 宽度 `340`，属性 Label 先设置 `max_width_chars(48)`、`width_chars(44)`、`wrap`/`WordChar`，最后才 `set_text`，避免先用自然宽度排版再因换行重排一次；属性滚动区固定 `380` 宽。
+- `crates/daemon/src/ui/mod.rs`：属性栏不再作为 `main_area` 的横向 Box 子项（打开时会持续占宽），改为 `overlay.add_overlay(&inspector)` 的右侧覆盖层，未打开时完全隐藏、不占内容宽度；打开后覆盖在内容右侧约 380px。
+
+**无人值守验证**：用 Xephyr `:95` + metacity + 私有 D-Bus + target `quicklook-viewer`（不安装 deb）：未按 `I` 时内容区右侧无空白占位；按 `I` 后属性覆盖层约 380px，文件名/类型/大小/位置/URI/像素信息完整可读，长 URI 自动换行。139 项测试、clippy 0、fmt 干净。

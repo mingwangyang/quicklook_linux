@@ -243,13 +243,17 @@ impl Controller {
         let inspector = gtk4::Revealer::builder()
             .transition_type(gtk4::RevealerTransitionType::SlideLeft)
             .build();
+        // 属性栏以覆盖层形式放在内容区右侧：未打开时不占宽度，打开后
+        // 也不会把图片/PDF 内容挤成一条细缝，窄窗口里仍能完整阅读。
         inspector.set_hexpand(false);
-        main_area.append(&inspector);
+        inspector.set_halign(gtk4::Align::End);
+        inspector.set_valign(gtk4::Align::Fill);
         // 全屏提示：盖在内容区顶部，进入全屏时短暂浮现「退出全屏：F / Esc」。
         let overlay = gtk4::Overlay::new();
         overlay.set_vexpand(true);
         overlay.set_hexpand(true);
         overlay.set_child(Some(&main_area));
+        overlay.add_overlay(&inspector);
         let fs_hint = gtk4::Label::new(Some("全屏中 · 按 F 或 Esc 退出全屏"));
         fs_hint.add_css_class("fullscreen-hint");
         fs_hint.set_halign(gtk4::Align::Center);

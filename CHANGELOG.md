@@ -1,3 +1,8 @@
+## [0.0.20] - 2026-11-18
+
+- 文件属性改为右侧覆盖层：不打开时不占内容宽度；打开后约 380px 宽，正文 340px，文件名/路径/URI 按 48 字符换行；正文 Label 先配置换行/宽度再塞文本，避免换行触发二次排版。
+- README 与打包文档同步 0.0.20。
+
 # 更新日志
 
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。

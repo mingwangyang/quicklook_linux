@@ -1,8 +1,9 @@
 # deb 安装与分发
 
-当前应用版本为 **V0.0.19**（`Cargo.toml` 的 `version` 字段）。deb 版本与应用版本完全一致，不再带 `-N` 修订后缀：
+当前应用版本为 **V0.0.20**（`Cargo.toml` 的 `version` 字段）。deb 版本与应用版本完全一致，不再带 `-N` 修订后缀：
 应用版本从 0.0.1 走到 0.0.3，托盘右键菜单新增「关于 Quick Look」（弹窗里写版本号）；
 0.0.9 X11 会话下预览窗口保持最上层（EWMH _NET_WM_STATE_ABOVE）；
+0.0.20 文件属性改为右侧覆盖层，不打开不占宽度，打开后加宽并避免二次换行排版；
 0.0.19 修「文件夹第二次唤起后空格关不掉」：目录 ListView 保留焦点，每次显示后把焦点拉回内容区；预热 viewer 改为后台启动，broker 不再被首次初始化阻塞；
 0.0.18 修「文件夹第二次唤起/Markdown 渲染时空格关不掉」：适配器正常路径不再同步查 broker，WebView 加独立按键控制器；同时把首次唤起预热到 150ms 级；
 0.0.17 修「点击预览标题栏、格式栏或底部状态胶囊后空格失效」：点击这些区域后把焦点还给内容区；
@@ -34,7 +35,7 @@ python3 scripts/build-deb.py            # 版本号取自 Cargo.toml，不再传
 ## 安装
 
 ```bash
-sudo apt install ./dist/quicklook_V0.0.19_amd64.deb
+sudo apt install ./dist/quicklook_V0.0.20_amd64.deb
 # 装完补上用户级接入（文件管理器 + niri 窗口规则）
 quicklook --apply-hosts
 ```

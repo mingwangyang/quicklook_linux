@@ -22,3 +22,6 @@ window.quicklook { background: #f7f8fa; color: #1f2933; }
 .quicklook .status-pill { background: rgba(31, 41, 51, 0.82); border-radius: 999px; padding: 4px 12px; }
 .quicklook .status-pill label { color: #f7f8fa; font-size: 12px; }
 .quicklook .fullscreen-hint { background: rgba(31, 41, 51, 0.82); color: #f7f8fa; padding: 8px 16px; border-radius: 999px; font-size: 13px; }
+
+.quicklook .inspector-scroll, .quicklook .inspector-body { background: #f7f8fa; color: #1f2933; }
+.quicklook .inspector-body label { color: #1f2933; }

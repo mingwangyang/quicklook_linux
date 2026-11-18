@@ -17,3 +17,6 @@ window.quicklook { background: #11151b; color: #e4eaf2; }
 .quicklook .status-pill { background: rgba(15, 20, 28, 0.86); border-radius: 999px; padding: 4px 12px; }
 .quicklook .status-pill label { color: #e4eaf2; font-size: 12px; }
 .quicklook .fullscreen-hint { background: rgba(15, 20, 28, 0.86); color: #e4eaf2; padding: 8px 16px; border-radius: 999px; font-size: 13px; }
+
+.quicklook .inspector-scroll, .quicklook .inspector-body { background: #11151b; color: #e4eaf2; }
+.quicklook .inspector-body label { color: #e4eaf2; }
