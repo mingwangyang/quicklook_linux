@@ -943,3 +943,21 @@ let inflight = {
 - `crates/daemon/src/ui/mod.rs`：属性栏不再作为 `main_area` 的横向 Box 子项（打开时会持续占宽），改为 `overlay.add_overlay(&inspector)` 的右侧覆盖层，未打开时完全隐藏、不占内容宽度；打开后覆盖在内容右侧约 380px。
 
 **无人值守验证**：用 Xephyr `:95` + metacity + 私有 D-Bus + target `quicklook-viewer`（不安装 deb）：未按 `I` 时内容区右侧无空白占位；按 `I` 后属性覆盖层约 380px，文件名/类型/大小/位置/URI/像素信息完整可读，长 URI 自动换行。139 项测试、clippy 0、fmt 干净。
+
+## 设置即时生效、快捷键扩充与「应用」（0.0.21）
+
+**问题**：主题切换要重启预览窗口才生效；其它设置也需要重启；预览键只支持空格、回车和 F1–F12，设置页的「保存设置」容易让用户以为主题也要保存。
+
+**实现**：
+- `crates/daemon/src/ui/mod.rs` 的 `Controller::apply_config()` 重新读取 `Config`，重载主题 CSS，更新 worker 的缓存/图片尺寸等参数，并对当前文件重新应用背景色；viewer DBus 接口新增 `ApplyConfig`。
+- `crates/daemon/src/worker.rs` 的 `Workers` 改为共享 `Arc<Mutex<Config>>`，后续解码任务自动使用新参数。
+- `crates/daemon/src/settings.rs` 的主题下拉在 `selected-notify` 时立即保存并调用 `ApplyConfig`；「应用」按钮保存后同步 broker 与已打开预览；按钮文案改为「应用」。
+- `crates/core/src/keys.rs` 的 `KEY_NAMES` 扩展为 Tab、方向键、Page Up/Down、Home/End、Insert/Delete、F1–F12、A–Z、0–9；`canonical`/`keyval`/`yazi`/`accelerator`/`describe` 同步支持。
+- `crates/core/src/protocol.rs` 增加 `ApplyConfig` 与 `ReloadConfig` 调用封装。
+
+**验证**：
+- Xephyr `:99` + metacity 中运行 target `quicklook-settings`：外观页显示八类背景色与主题下拉；选择「浅色」后**未点应用**，配置文件立即从 `theme = "dark"` 变为 `theme = "light"`。
+- 私有 D-Bus 启动 target `quicklook-viewer`，`Show a.png` 后主题为浅色；修改配置为深色并调用 `ApplyConfig`，截图标题栏/控件立即变为深色，无需重启。
+- `cargo test --release --workspace --offline`：140 项测试（95 core + 38 daemon + 其它）全绿；`cargo clippy --release --workspace --offline -- -D warnings` 0；`cargo fmt --all --check` 干净。
+
+包：`dist/quicklook_V0.0.21_amd64.deb`，SHA256 `40c3c51093766bcc46703d8e9cf68fdd9a9accecf85cf03c1fa97110fbd1e095`；`scripts/test-deb.py` 8/8 PASS；本机未执行系统安装（无免密 sudo，保留给用户安装验证）。

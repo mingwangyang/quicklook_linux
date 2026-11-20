@@ -21,7 +21,7 @@ impl Controller {
                 // PDF 默认用连续滚动；用户切过单页/连续后以用户选择为准。
                 let user_mode = self.state.borrow().pdf_user_mode;
                 if user_mode.is_none()
-                    && self.config.pdf_continuous
+                    && self.config.borrow().pdf_continuous
                     && !self.state.borrow().pdf_continuous
                 {
                     self.toggle_pdf_continuous(false);
@@ -338,7 +338,7 @@ impl Controller {
             let cancel = self.state.borrow().cancel.clone();
             let receiver = crate::backend::stream_webp(
                 file.path,
-                self.config.image_max_edge.min(1600),
+                self.config.borrow().image_max_edge.min(1600),
                 cancel,
             );
             let pause = gtk4::ToggleButton::with_label("暂停动画（K）");
@@ -772,7 +772,7 @@ impl Controller {
             buffer.set_language(Some(&language));
         }
         let schemes = sourceview5::StyleSchemeManager::default();
-        let scheme = if self.config.uses_dark_theme() {
+        let scheme = if self.config.borrow().uses_dark_theme() {
             schemes
                 .scheme("Adwaita-dark")
                 .or_else(|| schemes.scheme("oblivion"))
@@ -914,7 +914,8 @@ impl Controller {
         file: &FileInfo,
         diagrams: bool,
     ) -> webkit6::WebView {
-        let diagrams = diagrams && self.config.mermaid && !crate::mermaid::bundle().is_empty();
+        let diagrams =
+            diagrams && self.config.borrow().mermaid && !crate::mermaid::bundle().is_empty();
         let generation = self.state.borrow().generation;
         let (view, manager) = if diagrams {
             let manager = webkit6::UserContentManager::new();
@@ -926,7 +927,7 @@ impl Controller {
                 &[],
             ));
             manager.add_script(&webkit6::UserScript::new(
-                &crate::mermaid::bootstrap(self.config.uses_dark_theme()),
+                &crate::mermaid::bootstrap(self.config.borrow().uses_dark_theme()),
                 webkit6::UserContentInjectedFrames::TopFrame,
                 webkit6::UserScriptInjectionTime::End,
                 &[],
@@ -976,7 +977,7 @@ impl Controller {
         }
         let html = format!(
             "<!doctype html><html{}><head><meta charset='utf-8'><meta http-equiv='Content-Security-Policy' content=\"default-src 'none'; img-src data: file:; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; form-action 'none'\"><style>{}</style></head><body>{html}</body></html>",
-            if self.config.uses_dark_theme() {
+            if self.config.borrow().uses_dark_theme() {
                 " class='dark'"
             } else {
                 ""

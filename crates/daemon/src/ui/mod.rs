@@ -152,7 +152,8 @@ pub struct Controller {
     format_bar: gtk4::Box,
     status: gtk4::Label,
     pin: gtk4::ToggleButton,
-    config: Config,
+    config: RefCell<Config>,
+    theme_provider: gtk4::CssProvider,
     workers: Workers,
     state: RefCell<State>,
     mainloop: glib::MainLoop,
@@ -190,6 +191,7 @@ impl Controller {
                 gtk4::STYLE_PROVIDER_PRIORITY_APPLICATION,
             );
         }
+        let theme_provider = provider.clone();
         // 背景色由配置逐次覆盖：单独一张优先级更高的表，换文件时只重载这张。
         let bg_provider = gtk4::CssProvider::new();
         if let Some(display) = gdk::Display::default() {
@@ -324,7 +326,8 @@ impl Controller {
             status,
             pin,
             workers: Workers::new(config.clone()),
-            config,
+            config: RefCell::new(config),
+            theme_provider,
             mainloop,
             hidden_exit_ms: Cell::new(None),
             picker: RefCell::new(None),
@@ -540,6 +543,30 @@ if let Some(c)=weak.upgrade(){clear(&menu_box);if let Some(info)=c.displayed(){f
     pub fn report(&self, text: &str) {
         self.status.set_text(text);
     }
+    /// 重新读取配置文件，并把主题、背景色应用到当前预览窗口。
+    ///
+    /// 设置窗口在主题切换或点「应用」后调用；这样预热的常驻 viewer 不必重启
+    /// 就能显示新主题，也不会让用户误以为「主题要重启才生效」。
+    pub fn apply_config(&self) -> Result<()> {
+        let config = Config::load()?;
+        self.apply_style(config.uses_dark_theme());
+        self.workers.update_config(config.clone());
+        let current = self.state.borrow().current.clone();
+        *self.config.borrow_mut() = config;
+        if let Some(info) = current {
+            self.apply_background(&info);
+        }
+        Ok(())
+    }
+    fn apply_style(&self, dark: bool) {
+        apply_theme(dark);
+        let css = if dark {
+            concat!(include_str!("style.css"), include_str!("style-dark.css"))
+        } else {
+            include_str!("style.css")
+        };
+        self.theme_provider.load_from_string(css);
+    }
     pub fn handle(
         self: &Rc<Self>,
         method: &str,
@@ -550,6 +577,7 @@ if let Some(c)=weak.upgrade(){clear(&menu_box);if let Some(info)=c.displayed(){f
         }
         match method {
             "Pick" => self.pick(),
+            "ApplyConfig" => self.apply_config()?,
             "Preview" | "Show" | "Toggle" | "SetSelection" => {
                 let (uris,) = parameters
                     .get::<(Vec<String>,)>()
@@ -836,7 +864,11 @@ if let Some(c)=weak.upgrade(){clear(&menu_box);if let Some(info)=c.displayed(){f
             .or_else(|| monitors.item(0).and_downcast::<gdk::Monitor>());
         if let Some(monitor) = monitor {
             let r = monitor.geometry();
-            let (w, h) = preview_size((r.width(), r.height()), aspect, self.config.window_size());
+            let (w, h) = preview_size(
+                (r.width(), r.height()),
+                aspect,
+                self.config.borrow().window_size(),
+            );
             self.window.set_default_size(w, h);
         }
     }
@@ -919,7 +951,7 @@ if let Some(c)=weak.upgrade(){clear(&menu_box);if let Some(info)=c.displayed(){f
     }
     fn cache(&self, key: String, content: Arc<Prepared>) {
         let weight = content.weight();
-        let max = self.config.cache_mb * 1024 * 1024;
+        let max = self.config.borrow().cache_mb * 1024 * 1024;
         if weight > max {
             return;
         }
@@ -1052,7 +1084,7 @@ if let Some(c)=weak.upgrade(){clear(&menu_box);if let Some(info)=c.displayed(){f
                     {
                         let buffer = view.buffer();
                         if self.state.borrow().active.text_bytes + chunk.text.len()
-                            <= self.config.max_text_buffer_bytes
+                            <= self.config.borrow().max_text_buffer_bytes
                         {
                             self.state.borrow_mut().active.text_bytes += chunk.text.len();
                             buffer.insert(&mut buffer.end_iter(), &chunk.text);
@@ -1693,15 +1725,16 @@ if let Some(c)=weak.upgrade(){clear(&menu_box);if let Some(info)=c.displayed(){f
     }
     /// 当前文件对应的内容区背景色；`None` 表示跟随主题。
     fn background_color(&self, info: &FileInfo) -> Option<gdk::RGBA> {
+        let config = self.config.borrow();
         let value = match background_slot(info) {
-            "pdf" => &self.config.background_pdf,
-            "image" => &self.config.background_image,
-            "video" => &self.config.background_video,
-            "audio" => &self.config.background_audio,
-            "office" => &self.config.background_office,
-            "sheet" => &self.config.background_sheet,
-            "text" => &self.config.background_text,
-            _ => &self.config.background_other,
+            "pdf" => &config.background_pdf,
+            "image" => &config.background_image,
+            "video" => &config.background_video,
+            "audio" => &config.background_audio,
+            "office" => &config.background_office,
+            "sheet" => &config.background_sheet,
+            "text" => &config.background_text,
+            _ => &config.background_other,
         };
         parse_color(value)
     }

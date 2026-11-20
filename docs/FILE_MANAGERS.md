@@ -8,7 +8,7 @@ Quick Look 可以独立运行，文件管理器是可选入口。Rust 核心负�
 
 1. 选择要接入的文件管理器。
 2. 需要预览快捷键时打开「启用预览按键接管」。新配置默认关闭；已有设置不被重装覆盖。
-3. 点击独立的「应用文件管理器接入 / 注入」按钮。普通「保存设置」不写宿主配置。
+3. 点击独立的「应用文件管理器接入 / 注入」按钮。普通「应用」不写宿主配置。
 4. 正常退出并重新打开宿主。Caja 安装 python3-caja 后可以直接运行 caja；Thunar / 改键后的 Nemo 从应用菜单或适配启动器打开。通过适配启动器遇到未加载当前适配器的旧实例时，会询问是否重启；取消不会关窗。
 
 「撤销全部接入」会撤掉托管文件和块，并恢复备份的 desktop、原生预览服务。它不关闭文件管理器。正在运行的适配器要在对应进程退出后释放。
@@ -97,7 +97,7 @@ cargo test --locked --workspace
 cargo clippy --locked --workspace --all-targets -- -D warnings
 python3 scripts/test-caja-adapter.py --profile release
 python3 scripts/test-nemo-adapter.py --profile release
-python3 scripts/test-deb.py dist/quicklook_V0.0.20_amd64.deb
+python3 scripts/test-deb.py dist/quicklook_V0.0.21_amd64.deb
 ```
 
 Caja 在 Xephyr + marco + 私有 D-Bus 会话中验证空格、改键、多选、地址栏、菜单回调及选择引用释放。不会重启用户会话中的文件管理器。Nemo 的测试选择器使用临时 keyfile 设置强制列表视图，不依赖用户当前布局。

@@ -170,7 +170,7 @@ Nemo 改键为什么又能注入：GTK 的 **key snooper**（`gtk_key_snooper_in
 | `idle_timeout_secs` | 600 | 代理空闲退出 |
 | 其他 | — | `text_chunk_bytes`、`max_text_buffer_bytes`、`max_archive_entries`、`max_extracted_bytes`；`nemo_compat` 在 `host_nemo && hijack_native` 时自动开启，一般不用手写 |
 
-设置窗口：`quicklook --settings`（或托盘右键 →「设置…」）。五个区段：预览键（全局默认 + Nemo / Thunar / Caja / Yazi / Nautilus 各自「跟随全局默认 / 指定按键」）、窗口（默认布局浮动/平铺）、外观（浅色/深色）、文件管理器集成、渲染与缓存。「保存设置」只写选项；文件管理器接入通过独立的「应用文件管理器接入 / 注入」按钮应用，也可用「撤销全部接入」恢复宿主入口；已运行的宿主不会热加载，需重启对应的文件管理器（Nemo 请从应用菜单重启，才会走到启动器）。主题对设置窗口立即生效，对之后新开的预览窗口生效；默认布局会重写 niri 规则并触发 `niri msg action load-config-file`，下一次打开预览即生效（未安装 niri 集成时给出提示，不报错）。
+设置窗口：`quicklook --settings`（或托盘右键 →「设置…」）。六个区段：预览键（全局默认 + Nemo / Thunar / Caja / Yazi / Nautilus 各自「跟随全局默认 / 指定按键」）、窗口（默认布局浮动/平铺、默认尺寸）、外观（浅色/深色 + 八类背景色）、文件管理器集成、渲染与缓存、启动。「应用」写入选项并同步到已打开的预览窗口；主题切换即时生效，无需点「应用」。文件管理器接入通过独立的「应用文件管理器接入 / 注入」按钮应用，也可用「撤销全部接入」恢复宿主入口；已运行的宿主不会热加载，需重启对应的文件管理器（Nemo 请从应用菜单重启，才会走到启动器）。默认布局会重写 niri 规则并触发 `niri msg action load-config-file`，下一次打开预览即生效（未安装 niri 集成时给出提示，不报错）。
 
 托盘图标（StatusNotifierItem，由 `quicklookd` 提供）：左键 = 选文件预览，右键 = 设置… / 重启 / 退出。
 
@@ -302,4 +302,4 @@ Nemo 改键为什么又能注入：GTK 的 **key snooper**（`gtk_key_snooper_in
 
 用户通过终端输入 caja 启动，旧版启动器覆盖没有覆盖这个入口。现在复用 python3-caja 用户扩展，在模块导入时通过 ctypes 调用 Rust 库的 quicklook_caja_install；加载不依赖预先点击右键菜单。Rust 核对进程与接管配置，再安装同一个 GTK 按键处理器；共享 GtkSettings 标记避免两份库同时安装重复回调，模块保持驻留。没有 python3-caja 时显式启动器继续可用。
 
-本机已有 python3-caja 1.26.0，未新增系统包，也没有同名 PATH 替换。用户已确认普通 caja 命令恢复。当前 139 项 Rust 测试；原始命令、菜单和双加载连续按键测试与扩展方式完整 Caja 回归通过。当前应用版本为 V0.0.20，包文件为 quicklook_V0.0.20_amd64.deb（托盘右键新增「关于」并显示版本号）。
+本机已有 python3-caja 1.26.0，未新增系统包，也没有同名 PATH 替换。用户已确认普通 caja 命令恢复。当前 140 项 Rust 测试；原始命令、菜单和双加载连续按键测试与扩展方式完整 Caja 回归通过。当前应用版本为 V0.0.21，包文件为 quicklook_V0.0.21_amd64.deb（托盘右键新增「关于」并显示版本号）。

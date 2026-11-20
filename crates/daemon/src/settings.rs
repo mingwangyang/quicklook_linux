@@ -158,7 +158,7 @@ fn build(
 
     // 顶部一条常驻说明，直接回答「改完怎样才算生效」。
     let banner = gtk4::Label::new(Some(
-        "左侧选择分类。所有改动都要点右下角「保存设置」才会写入并生效；\
+        "左侧选择分类。主题会立即生效，其它改动点右下角「应用」写入并生效；\
          文件管理器接入选项还要再点一次「应用文件管理器接入 / 注入」。",
     ));
     banner.set_xalign(0.);
@@ -177,7 +177,7 @@ fn build(
         window_section(page, config, collector)
     });
     push_page(&stack, "appearance", "外观", |page| {
-        appearance_section(page, config, collector)
+        appearance_section(page, config, collector, status)
     });
     push_page(&stack, "hosts", "文件管理器", |page| {
         host_section(page, config, collector, status)
@@ -208,22 +208,22 @@ fn build(
     buttons.set_halign(gtk4::Align::End);
     let reset = gtk4::Button::with_label("恢复默认");
     let close = gtk4::Button::with_label("关闭");
-    let save = gtk4::Button::with_label("保存设置");
-    save.add_css_class("suggested-action");
+    let apply_button = gtk4::Button::with_label("应用");
+    apply_button.add_css_class("suggested-action");
     buttons.append(&reset);
     buttons.append(&close);
-    buttons.append(&save);
+    buttons.append(&apply_button);
     root.append(&buttons);
     window.set_child(Some(&root));
 
     {
         let collector = collector.clone();
         let status = status.clone();
-        save.connect_clicked(move |_| {
+        apply_button.connect_clicked(move |_| {
             let config = collector.borrow().read();
             let text = match apply(&config, false) {
-                Ok(text) => format!("✔ 已保存并生效。\n{text}"),
-                Err(error) => format!("保存失败：{error:#}"),
+                Ok(text) => format!("✔ 已应用并生效。\n{text}"),
+                Err(error) => format!("应用失败：{error:#}"),
             };
             status.set_text(&text);
         });
@@ -235,7 +235,7 @@ fn build(
         reset.connect_clicked(move |_| {
             collector.borrow().fill(&reset_config);
             status.set_text(
-                "已恢复默认选项，还需点「保存设置」写入；文件管理器接入请再点「应用文件管理器接入 / 注入」。",
+                "已恢复默认选项，还需点「应用」写入；文件管理器接入请再点「应用文件管理器接入 / 注入」。",
             );
         });
     }
@@ -365,11 +365,10 @@ fn key_section(
         |target, value| target.preview_key_nautilus = value,
     );
     inner.append(&hint(&format!(
-        "当前全局默认：{}。选「跟随全局默认」的宿主用上面的按键，也可以各自指定。\
-         Nautilus 的空格走原生预览接口，Ctrl/Alt 组合走脚本加速键；\
+        "当前全局默认：{}。可选空格、回车、Tab、方向键、Page Up/Down、Home/End、Insert/Delete、F1–F12、字母 A–Z 和数字 0–9，并可叠加 Ctrl/Shift/Alt；字母按小写 keyval 匹配，想用大写字母请同时勾选 Shift。\
+         选「跟随全局默认」的宿主用上面的按键，也可以各自指定。Nautilus 的空格走原生预览接口，Ctrl/Alt 组合走脚本加速键；\
          Dolphin 23.08 仅右键；26.04+（KIO 6.24+）可在其「配置快捷键」中把 Quick Look 设为空格。把裸空格改成别的键时，\
-         Nemo / Thunar / Caja 里原来的空格会被旁路器吃掉，避免同时弹出两套预览。\
-         保存后重启对应的文件管理器才会生效。",
+         Nemo / Thunar / Caja 里原来的按键会被旁路器吃掉，避免同时弹出两套预览。应用后重启对应的文件管理器才会生效。",
         key.describe()
     )));
 }
@@ -576,7 +575,7 @@ fn window_section(
     }
     size.append(&hint(
         "设置预览窗口打开时的初始大小（逻辑像素），最大不超过屏幕的 70%。\
-         改完点「保存设置」，下一次打开预览窗口时生效。勾选「按内容自动」时，\
+         改完点「应用」，下一次打开预览窗口时生效。勾选「按内容自动」时，\
          图片和 PDF 会按页面比例定窗口，让页面本身占满内容区（内容区约占窗口九成）。",
     ));
     let size_restore = {
@@ -617,6 +616,7 @@ fn appearance_section(
     root: &gtk4::Box,
     config: &Config,
     collector: &std::rc::Rc<std::cell::RefCell<Fields>>,
+    status: &gtk4::Label,
 ) {
     let inner = section(root, "外观");
     let row = gtk4::Box::new(gtk4::Orientation::Horizontal, 8);
@@ -626,7 +626,7 @@ fn appearance_section(
     row.append(&dropdown);
     inner.append(&row);
     inner.append(&hint(
-        "默认浅色。保存后设置窗口立即切换，之后打开的预览窗口使用新主题；已打开的预览窗口重新打开后生效。",
+        "主题切换会立即保存并应用，无需点「应用」；正在打开的预览窗口也会同步换肤。",
     ));
     background_row(
         &inner,
@@ -701,7 +701,7 @@ fn appearance_section(
         |target, value| target.background_other = value,
     );
     inner.append(&hint(
-        "默认色向常见应用看齐：PDF #333333（Evince / Acrobat 深灰）、图片 #1f1f1f（Gwenview / EOG）、视频 #000000（mpv / VLC）、音频 #1e1e1e（Audacity）、文档 #e6e6e6（LibreOffice 桌面灰）、表格 #ffffff（Calc 单元格白）。取消「自定义」则跟随主题；背景色在打开下一个文件时生效。",
+        "默认色向常见应用看齐：PDF #333333（Evince / Acrobat 深灰）、图片 #1f1f1f（Gwenview / EOG）、视频 #000000（mpv / VLC）、音频 #1e1e1e（Audacity）、文档 #e6e6e6（LibreOffice 桌面灰）、表格 #ffffff（Calc 单元格白）。取消「自定义」则跟随主题；点「应用」后当前预览窗口即时更新，下一次打开也生效。",
     ));
     let mermaid = gtk4::Switch::new();
     mermaid.set_active(config.mermaid);
@@ -722,6 +722,22 @@ fn appearance_section(
         Box::new(move |target: &mut Config| target.mermaid = mermaid.is_active())
     };
     collector.borrow_mut().add(mermaid_restore, mermaid_capture);
+    {
+        let status = status.clone();
+        dropdown.connect_selected_notify(move |dropdown| {
+            let dark = dropdown.selected() == 1;
+            apply_theme(dark);
+            let mut fresh = Config::load().unwrap_or_default();
+            fresh.theme = if dark { "dark".into() } else { "light".into() };
+            match fresh.save() {
+                Ok(_) => {
+                    let _ = quicklook_core::protocol::apply_viewer_config();
+                    status.set_text("已立即应用主题（无需点「应用」）。");
+                }
+                Err(error) => status.set_text(&format!("主题应用失败：{error:#}")),
+            }
+        });
+    }
     let restore = {
         let dropdown = dropdown.clone();
         Box::new(move |source: &Config| {
@@ -964,7 +980,10 @@ fn render_section(
 fn apply(config: &Config, apply_hosts: bool) -> Result<String> {
     apply_theme(config.uses_dark_theme());
     let path = config.save().context("写入配置失败")?;
-    let mut text = format!("已保存到 {}。", path.display());
+    let _ =
+        quicklook_core::protocol::reload_broker_config(config.host_nemo && config.hijack_native);
+    let _ = quicklook_core::protocol::apply_viewer_config();
+    let mut text = format!("已应用到 {}。", path.display());
     // 自启条目不属于文件管理器接入，保存即对齐，省得再多一个「应用」按钮。
     match hosts::apply_autostart_only(config) {
         Ok(report) if !report.written.is_empty() => {

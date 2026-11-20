@@ -1,13 +1,75 @@
 //! 可配置的预览快捷键，并统一映射到各宿主自己的按键写法。
 //!
-//! 只接受不带 Shift 层的按键（空格、回车、F1–F12），这样同一个配置在
-//! GTK、X11 keyval、Yazi 与 Nautilus 加速键里都是确定的一一对应关系；
-//! 字母键会因宿主是否展开 Shift 层而出现歧义，因此不支持。
+//! 支持空格、回车、Tab、方向键、Page Up/Down、Home/End、Insert/Delete、
+//! F1–F12、字母 A–Z 和数字 0–9，再配 Ctrl/Shift/Alt 修饰键。字母统一按
+//! 小写 keyval 匹配，用户若想用大写字母请同时勾选 Shift。
 use std::fmt;
 
 /// 设置界面可选的按键名，按显示顺序排列。
 pub const KEY_NAMES: &[&str] = &[
-    "Space", "Return", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12",
+    "Space",
+    "Return",
+    "Tab",
+    "BackSpace",
+    "Left",
+    "Right",
+    "Up",
+    "Down",
+    "Home",
+    "End",
+    "PageUp",
+    "PageDown",
+    "Insert",
+    "Delete",
+    "Escape",
+    "F1",
+    "F2",
+    "F3",
+    "F4",
+    "F5",
+    "F6",
+    "F7",
+    "F8",
+    "F9",
+    "F10",
+    "F11",
+    "F12",
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "H",
+    "I",
+    "J",
+    "K",
+    "L",
+    "M",
+    "N",
+    "O",
+    "P",
+    "Q",
+    "R",
+    "S",
+    "T",
+    "U",
+    "V",
+    "W",
+    "X",
+    "Y",
+    "Z",
+    "0",
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
 ];
 pub const MODIFIER_NAMES: &[&str] = &["Ctrl", "Shift", "Alt"];
 
@@ -33,6 +95,23 @@ fn canonical(name: &str) -> Option<String> {
     match lower.as_str() {
         "space" | "空格" | " " => Some("Space".into()),
         "return" | "enter" | "回车" => Some("Return".into()),
+        "tab" => Some("Tab".into()),
+        "backspace" | "back_space" | "退格" => Some("BackSpace".into()),
+        "left" | "leftarrow" | "左" => Some("Left".into()),
+        "right" | "rightarrow" | "右" => Some("Right".into()),
+        "up" | "uparrow" | "上" => Some("Up".into()),
+        "down" | "downarrow" | "下" => Some("Down".into()),
+        "home" => Some("Home".into()),
+        "end" => Some("End".into()),
+        "pageup" | "page_up" | "pgup" => Some("PageUp".into()),
+        "pagedown" | "page_down" | "pgdn" => Some("PageDown".into()),
+        "insert" | "ins" => Some("Insert".into()),
+        "delete" | "del" => Some("Delete".into()),
+        "escape" | "esc" => Some("Escape".into()),
+        other if other.len() == 1 && other.as_bytes()[0].is_ascii_alphabetic() => {
+            Some(other.to_ascii_uppercase())
+        }
+        other if other.len() == 1 && other.as_bytes()[0].is_ascii_digit() => Some(other.into()),
         other => {
             let index = other.strip_prefix('f')?.parse::<u8>().ok()?;
             (1..=12).contains(&index).then(|| format!("F{index}"))
@@ -88,7 +167,29 @@ impl PreviewKey {
         match self.name.as_str() {
             "Space" => 0x20,
             "Return" => 0xff0d,
+            "Tab" => 0xff09,
+            "BackSpace" => 0xff08,
+            "Left" => 0xff51,
+            "Right" => 0xff53,
+            "Up" => 0xff52,
+            "Down" => 0xff54,
+            "Home" => 0xff50,
+            "End" => 0xff57,
+            "PageUp" => 0xff55,
+            "PageDown" => 0xff56,
+            "Insert" => 0xff63,
+            "Delete" => 0xffff,
+            "Escape" => 0xff1b,
             other => {
+                if other.len() == 1 {
+                    let byte = other.as_bytes()[0];
+                    if byte.is_ascii_alphabetic() {
+                        return byte.to_ascii_lowercase() as u32;
+                    }
+                    if byte.is_ascii_digit() {
+                        return byte as u32;
+                    }
+                }
                 let index = other[1..].parse::<u32>().unwrap_or(1);
                 0xffbe + index.saturating_sub(1)
             }
@@ -110,7 +211,10 @@ impl PreviewKey {
         if self.alt {
             text.push_str("A-");
         }
-        text.push_str(&self.name);
+        match self.name.as_str() {
+            name if name.len() == 1 => text.push_str(&name.to_ascii_lowercase()),
+            name => text.push_str(name),
+        }
         text.push('>');
         text
     }
@@ -126,10 +230,13 @@ impl PreviewKey {
         if self.alt {
             text.push_str("<Alt>");
         }
-        text.push_str(match self.name.as_str() {
-            "Space" => "space",
-            other => other,
-        });
+        if self.name == "Space" {
+            text.push_str("space");
+        } else if self.name.len() == 1 {
+            text.push_str(&self.name.to_ascii_lowercase());
+        } else {
+            text.push_str(&self.name);
+        }
         text
     }
     /// Nautilus 脚本加速键只接受 Control 或 Alt；空格本身由宿主原生预览接管。
@@ -151,6 +258,19 @@ impl PreviewKey {
         text.push_str(match self.name.as_str() {
             "Space" => "空格",
             "Return" => "回车",
+            "Tab" => "Tab",
+            "BackSpace" => "退格",
+            "Left" => "左方向键",
+            "Right" => "右方向键",
+            "Up" => "上方向键",
+            "Down" => "下方向键",
+            "Home" => "Home",
+            "End" => "End",
+            "PageUp" => "Page Up",
+            "PageDown" => "Page Down",
+            "Insert" => "Insert",
+            "Delete" => "Delete",
+            "Escape" => "Esc",
             other => other,
         });
         text
@@ -300,10 +420,9 @@ mod tests {
     }
     #[test]
     fn rejects_ambiguous_and_unknown_keys() {
-        assert!(PreviewKey::parse("k").is_none());
         assert!(PreviewKey::parse("F13").is_none());
-        assert!(PreviewKey::parse("Space+").is_none());
         assert!(PreviewKey::parse("Hyper+Space").is_none());
+        assert!(PreviewKey::parse("Space+").is_none());
         assert!(PreviewKey::parse("").is_none());
     }
     #[test]
@@ -327,6 +446,7 @@ mod tests {
                 .nautilus_bindable()
         );
         assert!(!PreviewKey::parse("F3").unwrap().nautilus_bindable());
+        assert!(!PreviewKey::parse("K").unwrap().nautilus_bindable());
         assert!(PreviewKey::parse("Ctrl+Space").unwrap().nautilus_bindable());
         assert!(PreviewKey::parse("Alt+F3").unwrap().nautilus_bindable());
     }
@@ -440,6 +560,16 @@ mod tests {
             classify(KEY_RELEASE, 0x41, 0, &key, false),
             KeyAction::Ignore
         );
+    }
+
+    #[test]
+    fn supports_letters_digits_and_navigation_keys() {
+        assert_eq!(PreviewKey::parse("a").unwrap().keyval(), 0x61);
+        assert_eq!(PreviewKey::parse("K").unwrap().keyval(), 0x6b);
+        assert_eq!(PreviewKey::parse("7").unwrap().keyval(), 0x37);
+        assert_eq!(PreviewKey::parse("Left").unwrap().keyval(), 0xff51);
+        assert_eq!(PreviewKey::parse("Page_Down").unwrap().keyval(), 0xff56);
+        assert_eq!(PreviewKey::parse("Tab").unwrap().keyval(), 0xff09);
     }
 
     #[test]

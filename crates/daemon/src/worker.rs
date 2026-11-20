@@ -32,16 +32,18 @@ struct Queue {
 }
 pub struct Workers {
     queue: Arc<(Mutex<Queue>, Condvar)>,
+    config: Arc<Mutex<Config>>,
     pub receiver: mpsc::Receiver<Delivery>,
 }
 impl Workers {
     pub fn new(config: Config) -> Self {
         let queue = Arc::new((Mutex::new(Queue::default()), Condvar::new()));
+        let shared_config = Arc::new(Mutex::new(config));
         let (sender, receiver) = mpsc::channel();
         for index in 0..2 {
             let queue = queue.clone();
             let sender = sender.clone();
-            let config = config.clone();
+            let config = shared_config.clone();
             std::thread::Builder::new()
                 .name(format!("quicklook-decode-{index}"))
                 .spawn(move || {
@@ -68,6 +70,7 @@ impl Workers {
                             });
                             continue;
                         }
+                        let config = config.lock().unwrap_or_else(|e| e.into_inner()).clone();
                         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                             match job.task {
                                 Task::Prepare(info, spec) => {
@@ -100,7 +103,15 @@ impl Workers {
                 })
                 .expect("无法创建解码线程");
         }
-        Self { queue, receiver }
+        Self {
+            queue,
+            config: shared_config,
+            receiver,
+        }
+    }
+    /// 配置改动后让后续解码任务使用新的缓存/图片尺寸等参数。
+    pub fn update_config(&self, config: Config) {
+        *self.config.lock().unwrap_or_else(|e| e.into_inner()) = config;
     }
     pub fn submit(&self, id: u64, task: Task, cancel: Arc<AtomicBool>, low: bool) -> bool {
         let (lock, notify) = &*self.queue;

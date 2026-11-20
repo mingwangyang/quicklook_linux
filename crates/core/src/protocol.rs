@@ -1,3 +1,4 @@
+use glib::variant::ToVariant;
 pub const BUS: &str = "org.quicklook.Preview";
 pub const PATH: &str = "/org/quicklook/Preview";
 pub const APP_ID: &str = "org.quicklook.Preview";
@@ -14,6 +15,7 @@ pub const XML: &str = r#"<node><interface name="org.quicklook.Preview">
 <method name="SetSelection"><arg name="uris" type="as" direction="in"/></method>
 <method name="Pick"/>
 <method name="ReloadConfig"><arg name="nemo_enabled" type="b" direction="in"/></method>
+<method name="ApplyConfig"/>
 <method name="Next"/><method name="Prev"/><method name="Close"/>
 <method name="Back"/>
 <method name="Pin"><arg name="pinned" type="b" direction="in"/></method>
@@ -71,6 +73,47 @@ pub fn close_preview() -> bool {
             None,
             gio::DBusCallFlags::NONE,
             500,
+            None::<&gio::Cancellable>,
+        )
+        .is_ok()
+}
+
+/// 让正在运行的预览窗口重新读取配置并应用主题/背景色。
+/// 设置窗口修改主题或点「应用」后调用；没有运行中的 viewer 时静默失败，
+/// 下一次打开预览窗口会直接读取新配置。
+pub fn reload_broker_config(nemo_enabled: bool) -> bool {
+    let Ok(connection) = gio::bus_get_sync(gio::BusType::Session, None::<&gio::Cancellable>) else {
+        return false;
+    };
+    connection
+        .call_sync(
+            Some(BUS),
+            PATH,
+            BUS,
+            "ReloadConfig",
+            Some(&(nemo_enabled,).to_variant()),
+            None,
+            gio::DBusCallFlags::NO_AUTO_START,
+            1000,
+            None::<&gio::Cancellable>,
+        )
+        .is_ok()
+}
+
+pub fn apply_viewer_config() -> bool {
+    let Ok(connection) = gio::bus_get_sync(gio::BusType::Session, None::<&gio::Cancellable>) else {
+        return false;
+    };
+    connection
+        .call_sync(
+            Some(VIEWER_BUS),
+            VIEWER_PATH,
+            VIEWER_BUS,
+            "ApplyConfig",
+            None,
+            None,
+            gio::DBusCallFlags::NO_AUTO_START,
+            1000,
             None::<&gio::Cancellable>,
         )
         .is_ok()

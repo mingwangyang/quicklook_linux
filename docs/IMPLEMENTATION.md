@@ -15,7 +15,7 @@
 
 窗口分离（Ctrl+D）不再新开同进程窗口：viewer 只持有一个内容盒子和一个 DBus 对象，开第二个窗口需要重构渲染层。改为给兄弟二进制传 `--detached --initial-uri=<uri>`，由它自己起一个进程，app-id 是 `org.quicklook.Preview.Detached`。这个 id 不匹配弹窗那条 niri 规则，所以新窗口按普通窗口平铺；它不请求 `VIEWER_BUS`，也不注册 DBus 对象，关掉只结束自己。原窗口随即 `close()` 并按空闲秒数回收，因此分离后仍能按空格开新预览。分离窗口的 `detached` 状态让 Enter 打开外部应用时不自动关窗。
 
-统一预览键放在 `config.preview_key`（默认 `Space`，可选 `Space`/`Return`/`F1`–`F12` 加 Ctrl/Shift/Alt）。不用字母键是刻意的：字母的 GDK keyval 随 Shift 层变化，适配库直接比对 keyval 会歧义。适配库进程内读一次配置，按下修饰位被子集判断后才拦键，其余按键照旧交还宿主。
+统一预览键放在 `config.preview_key`（默认 `Space`，可选 Space/Return/Tab/方向键/Page Up-Down/Home-End/Insert/Delete、F1–F12、字母 A–Z 与数字 0–9，可叠加 Ctrl/Shift/Alt）。字母统一按小写 GDK keyval 匹配；想用大写字母需同时选择 Shift。适配库进程内读一次配置，按下修饰位被子集判断后才拦键，其余按键照旧交还宿主。
 
 各宿主对改键的跟随程度不同：Nemo / Thunar / Yazi 跟随；Nemo 默认空格仍走原生 `org.nemo.Preview`，只有非默认键才生成启动器、加载适配器并把裸空格吞掉；Nautilus 的裸空格归宿主，只有 Ctrl/Alt 组合能写进脚本加速键；Dolphin 目前无法支持空格预览：空格是宿主自己的打开/重命名行为，23.08 没有预览热键接口（26.04 + KIO 6.24 起才能在宿主手动绑定）。改键后必须重启对应宿主。
 
@@ -121,7 +121,7 @@ host_yazi = true
 nemo_compat = false
 ~~~
 
-按键解析集中在 `keys::PreviewKey`（只接受 `Space/Return/F1-F12` 加 `Ctrl/Shift/Alt`，字母 keyval 会随 Shift 层变化所以不支持）。`Config::key()` 是全局默认，`nemo_key()` / `thunar_key()` / `yazi_key()` / `nautilus_key()` 是各宿主的实际按键：覆盖为空或解析失败就跟随全局。写入侧一一对应——`apply_nemo` 用 `nemo_key()` 判断是否要装旁路器启动器，`apply_yazi_keymap` 用 `yazi_key()` 生成 `on = "<...>"`，`apply_accels` 用 `nautilus_key()` 生成 `scripts-accels`；读取侧 Nemo / Thunar 适配器在进程启动时各取自己的键并缓存（`PREVIEW_KEY` / `OnceLock`），所以改键要重启对应文件管理器。新增宿主入口时必须同时接上这两侧，否则会出现「设置里改了 Yazi，实际改了所有宿主」。
+按键解析集中在 `keys::PreviewKey`（接受 Space/Return/Tab/方向键/Page/Home/End/Insert/Delete、F1-F12、字母和数字，再叠加 Ctrl/Shift/Alt；字母按小写 keyval 匹配）。`Config::key()` 是全局默认，`nemo_key()` / `thunar_key()` / `yazi_key()` / `nautilus_key()` 是各宿主的实际按键：覆盖为空或解析失败就跟随全局。写入侧一一对应——`apply_nemo` 用 `nemo_key()` 判断是否要装旁路器启动器，`apply_yazi_keymap` 用 `yazi_key()` 生成 `on = "<...>"`，`apply_accels` 用 `nautilus_key()` 生成 `scripts-accels`；读取侧 Nemo / Thunar 适配器在进程启动时各取自己的键并缓存（`PREVIEW_KEY` / `OnceLock`），所以改键要重启对应文件管理器。新增宿主入口时必须同时接上这两侧，否则会出现「设置里改了 Yazi，实际改了所有宿主」。
 
 cache_mb 是解码缓存预算，纹理、WebKit、解码器还会另占内存。隐藏窗口回收后只留 broker，空闲 10 分钟 broker 退出。viewer_grace_secs 可设 3–600。
 
